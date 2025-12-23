@@ -1,0 +1,179 @@
+# =========================
+# Tennis Betting Model Configuration
+# =========================
+
+# Data Configuration
+data:
+  # Path to parquet files directory
+  parquet_dir: "../data_tennis_match_reduced/parquet"
+  
+  # CSV separator (if using CSV files)
+  csv_sep: ";"
+  
+  # Years for different datasets
+  train_years: [2019, 2020, 2021, 2022]
+  calib_years: [2023]
+  test_years: [2024]
+  
+  # Columns to exclude (leakage patterns)
+  leakage_patterns:
+    - "^score$"
+    - "elapsed_minutes"
+    - "^aces_nb_"
+    - "^doublefaults_nb_"
+    - "^svpt_"
+    - "^1stIn_"
+    - "^1stWon_"
+    - "^2ndWon_"
+    - "^SvGms_"
+    - "^bpSaved_"
+    - "^bpFaced_"
+
+# Model Configuration
+model:
+  # Model type: 'histgradient' or 'xgboost'
+  type: "histgradient"
+  
+  # Random seed for reproducibility
+  random_state: 42
+  
+  # Classification threshold
+  threshold: 0.5
+  
+  # HistGradientBoosting specific parameters
+  histgradient:
+    learning_rate: 0.05
+    max_iter: 200
+    max_depth: 6
+    min_samples_leaf: 20
+    l2_regularization: 1.0
+    early_stopping: true
+    validation_fraction: 0.1
+    n_iter_no_change: 10
+    
+  # XGBoost specific parameters
+  xgboost:
+    learning_rate: 0.05
+    n_estimators: 200
+    max_depth: 6
+    min_child_weight: 20
+    subsample: 0.8
+    colsample_bytree: 0.8
+    reg_alpha: 0.0
+    reg_lambda: 1.0
+    early_stopping_rounds: 10
+
+# Feature Engineering
+features:
+  # Number of recent matches for form calculation
+  recent_k: 10
+  
+  # Elo parameters
+  elo:
+    base: 1500.0
+    k: 32.0
+  
+  # Categorical encodings
+  encodings:
+    level:
+      G: 4
+      M: 3
+      A: 2
+      C: 1
+      F: 0
+    surface:
+      Hard: 3
+      Clay: 2
+      Grass: 1
+      Carpet: 0
+    round:
+      F: 6
+      SF: 5
+      QF: 4
+      R16: 3
+      R32: 2
+      R64: 1
+      R128: 0
+      Q1: -3
+      Q2: -2
+      Q3: -1
+
+# Training Configuration
+training:
+  # Objective function: alpha*Brier + (1-alpha)*(1-Acc)
+  alpha: 0.75
+  
+  # Calibration method: 'isotonic' or 'sigmoid'
+  calibration_method: "isotonic"
+  
+  # Whether to use calibration
+  use_calibration: true
+
+# Evaluation Configuration
+evaluation:
+  # Bootstrap settings
+  n_bootstrap: 2000
+  bootstrap_seed: 42
+  
+  # Confidence level for intervals
+  confidence_level: 0.95
+  
+  # Metrics to compute
+  metrics:
+    - accuracy
+    - brier_score
+    - log_loss
+    - objective
+
+# Inference Configuration
+inference:
+  # Input file path (can be overridden via CLI)
+  input_file: null
+  
+  # Output directory
+  output_dir: "./predictions"
+  
+  # Whether to include probabilities in output
+  include_probabilities: true
+  
+  # Batch processing
+  batch:
+    enabled: false
+    input_files: []
+
+# Output Configuration
+output:
+  # Results directory
+  results_dir: "./results"
+  
+  # Model save path
+  model_path: "./results/tennis_model.joblib"
+  
+  # Evaluation report path
+  eval_report: "./results/evaluation_report.txt"
+  
+  # Feature importance plot
+  feature_importance_plot: "./results/feature_importance.png"
+  
+  # Logging level: 'DEBUG', 'INFO', 'WARNING', 'ERROR'
+  log_level: "INFO"
+
+# Experimental Settings
+experiment:
+  # Enable feature ablation study
+  ablation_study: false
+  
+  # Feature sets for ablation
+  feature_sets:
+    BASE: ["Rank_Diff", "Pts_Diff", "tournament_surface", "tournament_level", "round", "best_of"]
+    SURFACE_FORM: "BASE + surface_win_pct"
+    RECENT_FORM: "SURFACE_FORM + recent_form"
+    FATIGUE: "RECENT_FORM + fatigue"
+    LEFTY: "FATIGUE + handedness"
+    ELO_BLOCK: "LEFTY + elo"
+  
+  # Cross-validation
+  cross_validation:
+    enabled: false
+    n_folds: 5
+    shuffle: false  # Keep temporal order
