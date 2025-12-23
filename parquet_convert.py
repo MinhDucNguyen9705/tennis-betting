@@ -2,8 +2,8 @@ import glob
 import os
 import pandas as pd
 
-SRC_GLOB = r"D:/OneDrive - Hanoi University of Science and Technology/Domain Basics/Introduction to Business Analytics/data_tennis_match_reduced/matches_data_*.csv"
-OUT_DIR  = r"D:/OneDrive - Hanoi University of Science and Technology/Domain Basics/Introduction to Business Analytics/data_tennis_match_reduced/parquet"
+SRC_GLOB = r"data_tennis_match_reduced/matches_data_*.csv"
+OUT_DIR  = r"data_tennis_match_reduced/parquet"
 
 os.makedirs(OUT_DIR, exist_ok=True)
 

@@ -171,8 +171,50 @@ def make_profile_layout(player_dim, levels, min_dt, max_dt, default_p1):
                 html.Div(id="p2_kpi_form10", style={"fontSize": "28px", "fontWeight": "600", "marginTop": "6px"}),
             ])), width=12),
             dbc.Col(dbc.Card(dbc.CardBody([
-                html.Div("Total aces", style={"fontSize": "14px", "opacity": 0.8}),
+                html.Div("Aces per match", style={"fontSize": "14px", "opacity": 0.8}),
                 html.Div(id="p2_kpi_aces", style={"fontSize": "28px", "fontWeight": "600", "marginTop": "6px"}),
+            ])), width=12),
+        ], className="g-3"), width=4),
+    ], className="g-3")
+
+    top_profile_row = dbc.Row([
+        # LEFT: Matches + Form (moved here)
+        dbc.Col(dbc.Row([
+            dbc.Col(dbc.Card(dbc.CardBody([
+                html.Div("Matches (All time)", style={"fontSize": "14px", "opacity": 0.8}),
+                html.Div(id="p2_kpi_matches", style={"fontSize": "28px", "fontWeight": "600", "marginTop": "6px"}),
+            ])), width=12),
+            dbc.Col(dbc.Card(dbc.CardBody([
+                html.Div("Win rate", style={"fontSize": "14px", "opacity": 0.8}),
+                html.Div(id="p2_kpi_wr", style={"fontSize": "28px", "fontWeight": "600", "marginTop": "6px"}),
+            ])), width=12),
+            dbc.Col(dbc.Card(dbc.CardBody([
+                html.Div("Form win rate (last 10)", style={"fontSize": "14px", "opacity": 0.8}),
+                html.Div(id="p2_kpi_form10", style={"fontSize": "28px", "fontWeight": "600", "marginTop": "6px"}),
+            ])), width=12),
+        ], className="g-3"), width=4),
+
+        # MIDDLE: Donut
+        dbc.Col(dbc.Card(dbc.CardBody([
+            html.Div("Win/Loss + Round Breakdown", style={"fontWeight": "600", "marginBottom": "8px"}),
+            dcc.Graph(id="p2_win_round_donut", config={"displayModeBar": False}, style={"height": "240px"})
+        ])), width=4),
+
+        # RIGHT: Aces + new metrics (Serve points + BP saved)
+        dbc.Col(dbc.Row([
+            dbc.Col(dbc.Card(dbc.CardBody([
+                html.Div("Avg aces", style={"fontSize": "14px", "opacity": 0.8}),
+                html.Div(id="p2_kpi_aces", style={"fontSize": "28px", "fontWeight": "600", "marginTop": "6px"}),
+            ])), width=12),
+
+            dbc.Col(dbc.Card(dbc.CardBody([
+                html.Div("Avg serve points", style={"fontSize": "14px", "opacity": 0.8}),
+                html.Div(id="p2_kpi_svpt", style={"fontSize": "28px", "fontWeight": "600", "marginTop": "6px"}),
+            ])), width=12),
+
+            dbc.Col(dbc.Card(dbc.CardBody([
+                html.Div("Avg BP saved", style={"fontSize": "14px", "opacity": 0.8}),
+                html.Div(id="p2_kpi_bpSaved", style={"fontSize": "28px", "fontWeight": "600", "marginTop": "6px"}),
             ])), width=12),
         ], className="g-3"), width=4),
     ], className="g-3")

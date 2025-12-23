@@ -6,7 +6,7 @@ from dash import Input, Output
 
 from data_access import (
     get_opponents_for_id, kpis, surface_wl,
-    profile_kpis, total_aces_by_player, wl_grouped,
+    profile_kpis, total_aces_by_player, avg_attributes_by_player, wl_grouped,
     top_opponents, recent_matches_player,
     win_round_counts, COLS
 )
@@ -73,6 +73,8 @@ def register_callbacks(app):
         Output("p2_kpi_wr", "children"),
         Output("p2_kpi_form10", "children"),
         Output("p2_kpi_aces", "children"),
+        Output("p2_kpi_svpt", "children"),
+        Output("p2_kpi_bpSaved", "children"),
         Output("p2_win_round_donut", "figure"),
         Output("p2_by_year", "figure"),
         Output("p2_by_surface", "figure"),
@@ -91,9 +93,13 @@ def register_callbacks(app):
     def refresh_profile_tab(p_id, mode, start_date, end_date, level):
         if not p_id:
             empty = go.Figure()
-            return ("0", "—", "—", "—",
-                    empty, empty, empty, empty, empty,
-                    [], [], [], [])
+            return (
+                "0", "—", "—", "—", "—", "—",
+                empty,                  
+                empty, empty, empty, empty,    
+                [], [],                        
+                [], []                    
+            )
 
         start_date, end_date, level = resolve_profile_filters(mode, start_date, end_date, level)
 
@@ -102,8 +108,10 @@ def register_callbacks(app):
         k_wr = "—" if wr is None or np.isnan(wr) else f"{wr*100:.1f}%"
         k_form = "—" if form10 is None or np.isnan(form10) else f"{form10*100:.1f}%"
 
-        aces_sum = total_aces_by_player(p_id, start_date, end_date, level)
-        k_aces = f"{aces_sum:,}" if aces_sum is not None else "0"
+        avg_aces, avg_svpt, avg_bpSaved = avg_attributes_by_player(p_id, start_date, end_date, level)
+        k_aces = f"{avg_aces:.2f}" if avg_aces is not None else "—"
+        k_svpt = f"{avg_svpt:.2f}" if avg_svpt is not None else "—"
+        k_bpSaved = f"{avg_bpSaved:.2f}" if avg_bpSaved is not None else "—"
 
         fig_donut = double_donut_win_round(win_round_counts(p_id, start_date, end_date, level))
 
@@ -126,7 +134,7 @@ def register_callbacks(app):
         rec_cols = [{"name": c, "id": c} for c in rec.columns]
         rec_data = rec.to_dict("records")
 
-        return (k_matches, k_wr, k_form, k_aces,
+        return (k_matches, k_wr, k_form, k_aces, k_svpt, k_bpSaved,
                 fig_donut, fig_year, fig_surf, fig_type, fig_round,
                 opp_data, opp_cols, rec_data, rec_cols)
 

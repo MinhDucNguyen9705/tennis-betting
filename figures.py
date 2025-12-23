@@ -48,12 +48,12 @@ def stacked_surface_fig(df: pd.DataFrame) -> go.Figure:
 
     fig = go.Figure()
     fig.add_bar(
-        x=df["tournament_surface"], y=df["wins"], name="Wins", marker_color="#1ade1a",
+        x=df["tournament_surface"], y=df["wins"], name="Wins", marker_color="#2ca02c",
         customdata=np.stack([df["win_rate"].values, df["wins"].values, df["losses"].values], axis=1),
         hovertemplate="Surface=%{x}<br>Wins=%{y}<br>Win rate=%{customdata[0]:.0%}<extra></extra>"
     )
     fig.add_bar(
-        x=df["tournament_surface"], y=df["losses"], name="Losses", marker_color="#f70707",
+        x=df["tournament_surface"], y=df["losses"], name="Losses", marker_color="#d62728",
         customdata=1-np.stack([df["win_rate"].values, df["wins"].values, df["losses"].values], axis=1),
         hovertemplate="Surface=%{x}<br>Losses=%{y}<br>Loss rate=%{customdata[0]:.0%}<extra></extra>"
     )
@@ -76,10 +76,10 @@ def stacked_wl_fig(df, xcol, title=""):
     losses = df[df["result"] == "Loss"]
 
     fig = go.Figure()
-    fig.add_bar(x=wins[xcol], y=wins["cnt"], name="Win")
-    fig.add_bar(x=losses[xcol], y=losses["cnt"], name="Loss")
+    fig.add_bar(x=wins[xcol], y=wins["cnt"], name="Win", marker_color="#2ca02c")
+    fig.add_bar(x=losses[xcol], y=losses["cnt"], name="Loss", marker_color="#d62728")
 
-    fig.update_layout(barmode="stack", margin=dict(l=10, r=10, t=30, b=10), title=title, hovermode="x unified")
+    fig.update_layout(barmode="stack", margin=dict(l=10, r=10, t=30, b=10), hovermode="x unified")
     return fig
 
 def double_donut_win_round(df: pd.DataFrame) -> go.Figure:
@@ -111,9 +111,12 @@ def double_donut_win_round(df: pd.DataFrame) -> go.Figure:
         )
         return fig
 
-    labels = []
-    parents = []
-    values = []
+    WIN_COLOR = "#2ca02c"   # green
+    LOSS_COLOR = "#d62728"  # red
+    WIN_CHILD = "#98df8a"   # light green
+    LOSS_CHILD = "#ff9896"  # light red
+
+    labels, parents, values, colors = [], [], [], []
 
     # --- Inner ring nodes ---
     totals = df.groupby("result", as_index=False)["cnt"].sum()
@@ -122,17 +125,18 @@ def double_donut_win_round(df: pd.DataFrame) -> go.Figure:
         v = int(totals.loc[totals["result"] == r, "cnt"].sum())
         if v > 0:
             labels.append(r)
-            parents.append("")   # root nodes -> inner ring
+            parents.append("")
             values.append(v)
+            colors.append(WIN_COLOR if r == "Win" else LOSS_COLOR)
 
-    # --- Outer ring nodes (round breakdown under each result) ---
-    # IMPORTANT: label must be unique across all nodes
-    # so we prefix with result
+    df = df.sort_values(["result", "round"])
+    
     for row in df.itertuples(index=False):
         child_label = f"{row.result} · {row.round}"
         labels.append(child_label)
-        parents.append(row.result)     # parent is "Win" or "Loss"
+        parents.append(row.result)
         values.append(int(row.cnt))
+        colors.append(WIN_CHILD if row.result == "Win" else LOSS_CHILD)
 
     fig = go.Figure(go.Sunburst(
         labels=labels,
@@ -141,9 +145,9 @@ def double_donut_win_round(df: pd.DataFrame) -> go.Figure:
         branchvalues="total",
         maxdepth=2,
         hovertemplate="%{label}<br>Count=%{value}<extra></extra>",
+        marker=dict(colors=colors),   # ✅ force colors
+        sort=False                    # ✅ don't reorder by value (prevents flips)
     ))
 
-    fig.update_layout(
-        margin=dict(l=10, r=10, t=30, b=10),
-    )
+    fig.update_layout(margin=dict(l=10, r=10, t=30, b=10))
     return fig

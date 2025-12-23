@@ -524,6 +524,36 @@ def total_aces_by_player(pid, start_date=None, end_date=None, level="(All)"):
     v = df.iloc[0]["total_aces"]
     return int(v) if v is not None and not math.isnan(v) else 0
 
+def avg_attributes_by_player(pid, start_date=None, end_date=None, level="(All)"):
+    # Requires columns: ID_1, ID_2, aces_nb_1, aces_nb_2
+    if not all(c in COLS for c in ["ID_1", "ID_2", "aces_nb_1", "aces_nb_2"]):
+        return None
+
+    where = ["(ID_1 = $p OR ID_2 = $p)"]
+    params = {"p": pid}
+
+    if start_date and end_date:
+        where.append("CAST(tournament_date AS DATE) BETWEEN $start AND $end")
+        params["start"] = str(start_date)
+        params["end"] = str(end_date)
+
+    if level and level != "(All)" and "tournament_level" in COLS:
+        where.append("tournament_level = $lvl")
+        params["lvl"] = level
+
+    q = f"""
+    SELECT
+      AVG(CASE WHEN ID_1 = $p THEN aces_nb_1 ELSE aces_nb_2 END) AS avg_aces,
+      AVG(CASE WHEN ID_1 = $p THEN svpt_1 ELSE svpt_2 END) AS avg_svpt,
+      AVG(CASE WHEN ID_1 = $p THEN bpSaved_1 ELSE bpSaved_2 END) AS avg_bpSaved
+    FROM matches
+    WHERE {" AND ".join(where)}
+    """
+    df = sql_df(q, params)
+    if df.empty:
+        return 0, 0, 0
+    return df.iloc[0]["avg_aces"], df.iloc[0]["avg_svpt"], df.iloc[0]["avg_bpSaved"]
+
 def wl_grouped(p_id, start_date, end_date, level, group_col):
     where, params = build_where_player_only(p_id, start_date, end_date, level)
 
