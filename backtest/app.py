@@ -9,7 +9,7 @@ from backtest_utils import TwoSidedKellyBacktester, TopPlayerKellyBacktester, Tw
 app = dash.Dash(__name__, suppress_callback_exceptions=True)
 
 # Tạo dữ liệu mẫu
-def generate_sample_data(n_matches=200):
+def read_output_model():
     """Tạo dữ liệu tennis giả lập"""
     test_df = pd.read_csv('test_df.csv')
     return test_df
@@ -228,7 +228,7 @@ def run_backtest(n_clicks, params, strategy):
     if n_clicks == 0 or not params:
         return html.Div(), {}, html.Div()
     
-    df = generate_sample_data()
+    df = read_output_model()
     capital = params.get('capital', 1000)
     
     if strategy == 'kelly':
