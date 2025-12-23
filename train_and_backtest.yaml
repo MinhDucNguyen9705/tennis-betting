@@ -1,0 +1,108 @@
+# =========================
+# Integrated Train & Backtest Configuration
+# =========================
+
+# Data Configuration
+data:
+  parquet_dir: "data_tennis_match_reduced/parquet"
+  csv_dir: "data_tennis_match_reduced"  # For matches with odds
+  
+  # Training period
+  train_years: [2019, 2020, 2021]
+  calib_years: [2022]
+  
+  # Backtest period
+  backtest_years: [2023, 2024]
+  
+  csv_sep: ";"
+
+# Model Configuration
+model:
+  type: "histgradient"
+  random_state: 42
+  threshold: 0.5
+  
+  histgradient:
+    learning_rate: 0.05
+    max_iter: 200
+    max_depth: 6
+    min_samples_leaf: 20
+    l2_regularization: 1.0
+    early_stopping: true
+    validation_fraction: 0.1
+    n_iter_no_change: 10
+
+# Training Configuration
+training:
+  alpha: 0.75
+  calibration_method: "isotonic"
+  use_calibration: true
+
+# Feature Engineering
+features:
+  recent_k: 10
+  elo:
+    base: 1500.0
+    k: 32.0
+  encodings:
+    level:
+      G: 4
+      M: 3
+      A: 2
+      C: 1
+      F: 0
+    surface:
+      Hard: 3
+      Clay: 2
+      Grass: 1
+      Carpet: 0
+    round:
+      F: 6
+      SF: 5
+      QF: 4
+      R16: 3
+      R32: 2
+      R64: 1
+      R128: 0
+      Q1: -3
+      Q2: -2
+      Q3: -1
+
+# Backtest Configuration
+backtest:
+  # Initial capital
+  initial_capital: 10000
+  
+  # Strategies to test
+  strategies:
+    kelly:
+      enabled: true
+      kelly_multiplier: 0.5
+      max_stake_pct: 0.15
+      
+    top_player_kelly:
+      enabled: true
+      top_n: 8
+      kelly_multiplier: 0.5
+      max_stake_pct: 0.15
+      
+    simple_fixed:
+      enabled: true
+      bet_amount: 100
+      threshold: 0.05
+  
+  # Odds columns to use
+  odds_bookmaker: "PS"  # Pinnacle odds (PS_1, PS_2)
+  
+  # Results display
+  plot_results: true
+  save_detailed_log: true
+
+# Output Configuration
+output:
+  results_dir: "./results"
+  model_path: "./results/tennis_model.joblib"
+  predictions_path: "./results/backtest_predictions.csv"
+  backtest_report: "./results/backtest_report.txt"
+  equity_plot: "./results/equity_curve.png"
+  log_level: "INFO"
