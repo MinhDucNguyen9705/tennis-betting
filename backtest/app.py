@@ -9,8 +9,7 @@ from backtest_utils import TwoSidedKellyBacktester, TopPlayerKellyBacktester, Tw
 app = dash.Dash(__name__, suppress_callback_exceptions=True)
 
 # Tạo dữ liệu mẫu
-def generate_sample_data(n_matches=200):
-    """Tạo dữ liệu tennis giả lập"""
+def read_output_model():
     test_df = pd.read_csv('test_df.csv')
     return test_df
 
@@ -62,9 +61,9 @@ def create_backtest_tab():
                 dcc.Dropdown(
                     id='strategy-dropdown',
                     options=[
-                        {'label': '📊 Two-Sided Kelly (Kelly 2 Chiều)', 'value': 'kelly'},
-                        {'label': '🏆 Top Player Kelly (Lọc Top N)', 'value': 'top_player'},
-                        {'label': '💰 Two-Sided Simple (Cược Cố Định)', 'value': 'simple'}
+                        {'label': '📊 Two-Sided Kelly', 'value': 'kelly'},
+                        {'label': '🏆 Top Player Kelly', 'value': 'top_player'},
+                        {'label': '💰 Two-Sided Simple', 'value': 'simple'}
                     ],
                     value='kelly',
                     style={'width': '100%'}
@@ -76,7 +75,7 @@ def create_backtest_tab():
             
             # Run Button
             html.Div([
-                html.Button('🚀 Chạy Backtest', id='run-button', n_clicks=0,
+                html.Button('🚀 Running Backtest', id='run-button', n_clicks=0,
                            style={
                                'width': '100%',
                                'padding': '15px',
@@ -95,7 +94,6 @@ def create_backtest_tab():
                 id="loading",
                 type="default",
                 children=[
-                    # Results Cards
                     html.Div(id='results-cards', style={'marginBottom': 30}),
                     
                     # Equity Chart
@@ -128,9 +126,9 @@ def update_params_panel(strategy):
     
     if strategy == 'kelly':
         return html.Div([
-            html.H3('⚙️ Tham Số Kelly 2 Chiều', style={'color': '#8e44ad'}),
+            html.H3('⚙️ Two-Sided Kelly Hyperparameters', style={'color': '#8e44ad'}),
             html.Div([
-                html.Label('Vốn Ban Đầu ($):', style=label_style),
+                html.Label('Initial Capital ($):', style=label_style),
                 dcc.Input(id={'type': 'param', 'name': 'capital'}, type='number', value=1000, 
                          style={'width': '100%', 'padding': '8px'})
             ], style=common_style),
@@ -150,9 +148,9 @@ def update_params_panel(strategy):
     
     elif strategy == 'top_player':
         return html.Div([
-            html.H3('⚙️ Tham Số Top Player Strategy', style={'color': '#3498db'}),
+            html.H3('⚙️ Top Player Strategy Hyperparameters', style={'color': '#3498db'}),
             html.Div([
-                html.Label('Vốn Ban Đầu ($):', style=label_style),
+                html.Label('Initial Capital ($):', style=label_style),
                 dcc.Input(id={'type': 'param', 'name': 'capital'}, type='number', value=1000, 
                          style={'width': '100%', 'padding': '8px'})
             ], style=common_style),
@@ -178,9 +176,9 @@ def update_params_panel(strategy):
     
     else:  # simple
         return html.Div([
-            html.H3('⚙️ Tham Số Simple Strategy', style={'color': '#e74c3c'}),
+            html.H3('⚙️ Simple Strategy Hyperparameters', style={'color': '#e74c3c'}),
             html.Div([
-                html.Label('Vốn Ban Đầu ($):', style=label_style),
+                html.Label('Initial Capital ($):', style=label_style),
                 dcc.Input(id={'type': 'param', 'name': 'capital'}, type='number', value=1000, 
                          style={'width': '100%', 'padding': '8px'})
             ], style=common_style),
@@ -228,7 +226,7 @@ def run_backtest(n_clicks, params, strategy):
     if n_clicks == 0 or not params:
         return html.Div(), {}, html.Div()
     
-    df = generate_sample_data()
+    df = read_output_model()
     capital = params.get('capital', 1000)
     
     if strategy == 'kelly':
@@ -274,7 +272,7 @@ def run_backtest(n_clicks, params, strategy):
     
     cards = html.Div([
         html.Div([
-            html.H4('💵 Lợi Nhuận', style={'color': '#7f8c8d', 'marginBottom': 10}),
+            html.H4('💵 Profit', style={'color': '#7f8c8d', 'marginBottom': 10}),
             html.H2(f'${profit:,.2f}', 
                    style={'color': '#27ae60' if profit > 0 else '#e74c3c', 'margin': 0})
         ], style={'flex': 1, 'padding': 20, 'backgroundColor': '#ecf0f1', 
@@ -288,7 +286,7 @@ def run_backtest(n_clicks, params, strategy):
                  'borderRadius': 8, 'textAlign': 'center', 'marginRight': 10}),
         
         html.Div([
-            html.H4('💰 Vốn Cuối', style={'color': '#7f8c8d', 'marginBottom': 10}),
+            html.H4('💰 Final capital', style={'color': '#7f8c8d', 'marginBottom': 10}),
             html.H2(f'${bt.current_capital:,.2f}', 
                    style={'color': '#2c3e50', 'margin': 0})
         ], style={'flex': 1, 'padding': 20, 'backgroundColor': '#ecf0f1', 
@@ -315,29 +313,29 @@ def run_backtest(n_clicks, params, strategy):
     ))
     
     fig.add_hline(y=bt.initial_capital, line_dash="dash", 
-                  line_color="red", annotation_text="Vốn Gốc")
+                  line_color="red", annotation_text="Initial Capital")
     
     fig.update_layout(
         title=dict(text=f'📊 Equity Curve - {title}', x=0.5, xanchor='center'),
-        xaxis_title='Số Trận',
-        yaxis_title='Vốn ($)',
+        xaxis_title='Number of Matches',
+        yaxis_title='Capital ($)',
         template='plotly_white',
         height=500,
         hovermode='x unified'
     )
     
     stats = html.Div([
-        html.H3('📋 Chi Tiết Thống Kê', style={'marginBottom': 20}),
+        html.H3('📋 Detail Statistics', style={'marginBottom': 20}),
         html.Table([
             html.Tr([
-                html.Th('Chỉ Số', style={'padding': 10, 'textAlign': 'left', 'backgroundColor': '#34495e', 'color': 'white'}), 
-                html.Th('Giá Trị', style={'padding': 10, 'textAlign': 'right', 'backgroundColor': '#34495e', 'color': 'white'})
+                html.Th('Information', style={'padding': 10, 'textAlign': 'left', 'backgroundColor': '#34495e', 'color': 'white'}), 
+                html.Th('Value', style={'padding': 10, 'textAlign': 'right', 'backgroundColor': '#34495e', 'color': 'white'})
             ]),
-            html.Tr([html.Td('Vốn Ban Đầu', style={'padding': 10}), 
+            html.Tr([html.Td('Initial Capital', style={'padding': 10}), 
                     html.Td(f'${bt.initial_capital:,.2f}', style={'padding': 10, 'textAlign': 'right'})]),
-            html.Tr([html.Td('Vốn Cuối Cùng', style={'padding': 10, 'backgroundColor': '#ecf0f1'}), 
+            html.Tr([html.Td('Final Capital', style={'padding': 10, 'backgroundColor': '#ecf0f1'}), 
                     html.Td(f'${bt.current_capital:,.2f}', style={'padding': 10, 'textAlign': 'right', 'backgroundColor': '#ecf0f1'})]),
-            html.Tr([html.Td('Lợi Nhuận', style={'padding': 10}), 
+            html.Tr([html.Td('Profit', style={'padding': 10}), 
                     html.Td(f'${profit:,.2f}', style={'padding': 10, 'textAlign': 'right', 
                     'color': '#27ae60' if profit > 0 else '#e74c3c', 'fontWeight': 'bold'})]),
             html.Tr([html.Td('ROI', style={'padding': 10, 'backgroundColor': '#ecf0f1'}), 
@@ -348,7 +346,7 @@ def run_backtest(n_clicks, params, strategy):
                     'color': '#e74c3c', 'fontWeight': 'bold'})]),
             html.Tr([html.Td('Peak Capital', style={'padding': 10, 'backgroundColor': '#ecf0f1'}), 
                     html.Td(f'${peak:,.2f}', style={'padding': 10, 'textAlign': 'right', 'backgroundColor': '#ecf0f1'})]),
-            html.Tr([html.Td('Số Trận Backtest', style={'padding': 10}), 
+            html.Tr([html.Td('Number of Bettings Matches', style={'padding': 10}), 
                     html.Td(str(len(df)), style={'padding': 10, 'textAlign': 'right'})]),
         ], style={
             'width': '100%',
@@ -378,7 +376,7 @@ def run_comparison(n_clicks, n_matches, capital):
     if n_clicks == 0:
         return html.Div(), {}, {}, {}
     
-    df = generate_sample_data(n_matches or 200)
+    df = read_output_model()
     capital = capital or 1000
     
     # Chạy cả 3 strategies
@@ -431,7 +429,7 @@ def run_comparison(n_clicks, n_matches, capital):
             html.H3(name, style={'color': data['color'], 'marginBottom': 15}),
             html.Div([
                 html.Div([
-                    html.P('Lợi Nhuận', style={'margin': 0, 'color': '#7f8c8d', 'fontSize': 12}),
+                    html.P('Profit', style={'margin': 0, 'color': '#7f8c8d', 'fontSize': 12}),
                     html.H4(f"${data['profit']:,.2f}", 
                            style={'margin': '5px 0', 'color': '#27ae60' if data['profit'] > 0 else '#e74c3c'})
                 ], style={'marginBottom': 10}),
