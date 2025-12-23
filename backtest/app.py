@@ -10,7 +10,6 @@ app = dash.Dash(__name__, suppress_callback_exceptions=True)
 
 # Tạo dữ liệu mẫu
 def read_output_model():
-    """Tạo dữ liệu tennis giả lập"""
     test_df = pd.read_csv('test_df.csv')
     return test_df
 
