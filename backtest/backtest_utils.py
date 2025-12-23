@@ -114,6 +114,11 @@ class TwoSidedKellyBacktester:
             except Exception as e:
                 continue
             
+            if self.current_capital <= 0:
+                print("!!! CHÁY TÀI KHOẢN !!!")
+                break
+            if self.current_capital == self.capital_history[-1]:
+                continue
             self.capital_history.append(self.current_capital)
             
         self._generate_report(bets_won, bets_lost, skipped)
@@ -207,6 +212,8 @@ class TopPlayerKellyBacktester:
             
             if not is_top_match:
                 skipped_low_rank += 1
+                if self.current_capital == self.capital_history[-1]:
+                    continue
                 self.capital_history.append(self.current_capital) # Giữ nguyên tiền
                 continue
 
@@ -271,7 +278,8 @@ class TopPlayerKellyBacktester:
             else:
                 skipped_no_edge += 1
 
-            
+            if self.current_capital == self.capital_history[-1]:
+                continue
             self.capital_history.append(self.current_capital)
             
         # TỔNG KẾT
@@ -329,6 +337,9 @@ class TwoSidedBacktester:
         data = df.copy()
         
         for idx, row in data.iterrows():
+            if self.current_capital <= 0:
+                print("!!! CHÁY TÀI KHOẢN !!!")
+                break
             # 1. LẤY DỮ LIỆU CƠ BẢN
             name_1 = row[p1_col]
             winner = row[winner_col]
@@ -393,6 +404,8 @@ class TwoSidedBacktester:
             else:
                 skipped += 1
 
+            if self.current_capital == self.capital_history[-1]:
+                continue
             self.capital_history.append(self.current_capital)
             
         self._generate_report(bets_won, bets_lost, skipped)
