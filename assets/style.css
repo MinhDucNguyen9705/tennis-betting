@@ -1,0 +1,39 @@
+.DateRangePicker, .DateRangePickerInput {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+.DateRangePickerInput {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  overflow: hidden !important;
+  gap: 6px !important;
+}
+.DateInput {
+  flex: 1 1 0 !important;
+  width: 0 !important;
+  min-width: 95px !important;
+}
+.DateInput_input {
+  font-size: 13px !important;
+  padding: 6px 8px !important;
+}
+.DateRangePickerInput_arrow {
+  padding: 0 4px !important;
+}
+
+.Select-menu-outer, .Select-menu {
+  max-height: 320px !important;
+}
+
+.Select-option {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.Select-value-label {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}

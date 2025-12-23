@@ -1,0 +1,16 @@
+*.csv
+/*.csv
+**/*.parquet
+/parquet/
+*.xlsx
+*.pptx
+.vscode/
+/.vscode/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+.DS_Store
+.env/
+/*.ipynb

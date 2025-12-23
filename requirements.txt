@@ -1,0 +1,8 @@
+dash
+duckdb
+pandas
+numpy
+dash-ag-grid
+dash_design_kit
+dash-bootstrap-components
+plotly
