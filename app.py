@@ -537,6 +537,7 @@ import dash_bootstrap_components as dbc
 from data_access import get_player_dim, get_levels, get_date_bounds
 from layouts import make_h2h_layout, make_profile_layout
 from callbacks import register_callbacks
+from backtest.backtest_tab import make_backtest_layout, register_backtest_callbacks, read_output_model
 
 player_dim = get_player_dim()
 levels = get_levels()
@@ -556,6 +557,7 @@ app.layout = dbc.Container(
             [
                 dbc.Tab(dashboard_layout, label="Head to Head", tab_id="tab-h2h"),
                 dbc.Tab(profile_layout, label="Player Profile (vs All)", tab_id="tab-profile"),
+                dbc.Tab(make_backtest_layout(), label="Backtest"),
             ],
             active_tab="tab-h2h",
         )
@@ -563,6 +565,17 @@ app.layout = dbc.Container(
 )
 
 register_callbacks(app)
+def load_backtest_df():
+    # IMPORTANT: replace this with your real data source:
+    # - DuckDB query
+    # - Parquet scan
+    # - or your existing function that returns the matches dataframe used for modeling/backtest
+    #
+    # Example:
+    # return sql_df("SELECT * FROM matches WHERE pred_prob IS NOT NULL AND odds IS NOT NULL")
+    return read_output_model()  # placeholder
+
+register_backtest_callbacks(app, load_backtest_df)
 
 if __name__ == "__main__":
     app.run(debug=True, host="127.0.0.1", port=8050)

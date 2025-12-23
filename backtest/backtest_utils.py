@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+import plotly.express as px
 
 class TwoSidedKellyBacktester:
     def __init__(self, initial_capital=1000, kelly_multiplier=0.5, max_stake_pct=0.15):
@@ -16,6 +18,7 @@ class TwoSidedKellyBacktester:
         self.capital_history = [initial_capital]
         self.stakes_history = []
         self.metrics = {}
+        self.trades = []
 
     def calculate_kelly_stake(self, prob, odds):
         """Tính % vốn cược theo công thức Kelly"""
@@ -110,6 +113,33 @@ class TwoSidedKellyBacktester:
                 else:
                     skipped += 1
                     self.stakes_history.append(0)
+                # print(selected_bet, final_stake_pct)
+                odds = odds_p1 if selected_bet == "P1" else odds_p2
+                prob = prob_p1 if selected_bet == "P1" else prob_p2
+                payout = profit if is_win else -bet_amount
+                # print(odds, prob, selected_bet, final_stake_pct)
+
+                self.trades.append({
+                    "date": row.get("tournament_date", None),
+                    # "tournament_type": row.get("tournament_type", None),
+                    "tournament_level": row.get("tournament_level", None),
+                    "surface": row.get("tournament_surface", row.get("surface", None)),
+                    "round": row.get("round", None),
+
+                    "bet_side": selected_bet,
+                    "prob": float(prob),
+                    "odds": float(odds),
+                    "stake": float(bet_amount),
+                    "pnl": float(payout),
+                    "is_win": int(is_win),
+
+                    # optional rank analysis if columns exist
+                    "rank1": row.get("Ranking_1", None),
+                    "rank2": row.get("Ranking_2", None),
+                    "rank_diff": (row.get("Ranking_2", None) - row.get("Ranking_1", None))
+                                if (pd.notna(row.get("Ranking_1", None)) and pd.notna(row.get("Ranking_2", None)))
+                                else None,
+                })
 
             except Exception as e:
                 continue
@@ -135,12 +165,12 @@ class TwoSidedKellyBacktester:
             dd = (peak - x) / peak
             if dd > max_dd: max_dd = dd
 
-        print("\n--- KẾT QUẢ ---")
-        print(f"Vốn cuối: ${self.current_capital:.2f} (Lãi: ${profit:.2f})")
-        print(f"Tổng lệnh: {total_bets} (Win Rate: {wins/total_bets*100:.1f}%)")
-        print(f"ROI (trên vốn): {roi:.2f}%")
-        print(f"Max Drawdown: {max_dd*100:.2f}%")
-        print("---------------")
+        # print("\n--- KẾT QUẢ ---")
+        # print(f"Vốn cuối: ${self.current_capital:.2f} (Lãi: ${profit:.2f})")
+        # print(f"Tổng lệnh: {total_bets} (Win Rate: {wins/total_bets*100:.1f}%)")
+        # print(f"ROI (trên vốn): {roi:.2f}%")
+        # print(f"Max Drawdown: {max_dd*100:.2f}%")
+        # print("---------------")
 
     def plot_results(self):
         plt.figure(figsize=(10, 6))
@@ -427,3 +457,117 @@ class TwoSidedBacktester:
         plt.axhline(y=self.initial_capital, color='r', linestyle='--')
         plt.title('Equity Curve (Two-Sided Betting)')
         plt.show()
+
+def trades_df(bt):
+    df = pd.DataFrame(getattr(bt, "trades", []))
+    if df.empty:
+        return df
+
+    # coerce numerics
+    for c in ["pnl", "stake", "prob", "odds", "rank1", "rank2"]:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+
+    # compute rank_diff if possible
+    if "rank_diff" not in df.columns:
+        if "rank1" in df.columns and "rank2" in df.columns:
+            df["rank_diff"] = df["rank2"] - df["rank1"]
+
+    # fill labels
+    if "tournament_level" in df.columns:
+        df["tournament_level"] = df["tournament_level"].fillna("(Unknown)").astype(str)
+
+    return df
+
+def _empty_msg(title, msg):
+    fig = go.Figure()
+    fig.update_layout(
+        title=title,
+        template="plotly_white",
+        margin=dict(l=10, r=10, t=40, b=10),
+        annotations=[dict(text=msg, x=0.5, y=0.5, showarrow=False)]
+    )
+    return fig
+
+def fig_profit_by(df_trades, col="tournament_level", title="Profit by Tournament Level"):
+    if df_trades is None or df_trades.empty:
+        return _empty_msg(title, "No trades logged (bt.trades is empty).")
+    if col not in df_trades.columns:
+        return _empty_msg(title, f"Missing column: {col}")
+    g = df_trades.groupby(col, dropna=False)["pnl"].sum().reset_index()
+    g[col] = g[col].fillna("(Unknown)")
+    if g.empty:
+        return _empty_msg(title, "No data after grouping.")
+    fig = px.bar(g.sort_values("pnl", ascending=False), x=col, y="pnl", title=title)
+    fig.update_layout(template="plotly_white", margin=dict(l=10, r=10, t=40, b=10))
+    return fig
+
+def fig_roi_by_rankdiff(df_trades, title="ROI by Rank Difference Bucket"):
+    if df_trades is None or df_trades.empty:
+        return _empty_msg(title, "No trades logged.")
+    if "rank_diff" not in df_trades.columns:
+        return _empty_msg(title, "Missing rank_diff (need rank1/rank2 in trade log).")
+
+    d = df_trades.dropna(subset=["rank_diff"]).copy()
+    if d.empty:
+        return _empty_msg(title, "rank_diff is all NaN.")
+
+    bins = [-9999, -200, -100, -50, -20, 0, 20, 50, 100, 200, 9999]
+    labels = ["<-200","-200:-100","-100:-50","-50:-20","-20:0","0:20","20:50","50:100","100:200",">200"]
+    d["rank_bucket"] = pd.cut(d["rank_diff"], bins=bins, labels=labels)
+
+    g = d.groupby("rank_bucket", observed=True).agg(
+        pnl=("pnl", "sum"),
+        stake=("stake", "sum"),
+        bets=("pnl", "size"),
+    ).reset_index()
+    g["roi"] = (g["pnl"] / g["stake"]).replace([np.inf, -np.inf], np.nan) * 100
+    g["roi"] = g["roi"].fillna(0)
+
+    fig = px.bar(g, x="rank_bucket", y="roi", title=title, hover_data=["bets", "pnl", "stake"])
+    fig.update_layout(template="plotly_white", margin=dict(l=10, r=10, t=40, b=10))
+    return fig
+
+def fig_pnl_by_prob_bucket(df_trades, title="ROI by Predicted Probability Bucket"):
+    def empty_msg(msg):
+        fig = go.Figure()
+        fig.update_layout(
+            title=title,
+            template="plotly_white",
+            margin=dict(l=10, r=10, t=40, b=10),
+            annotations=[dict(text=msg, x=0.5, y=0.5, showarrow=False)]
+        )
+        return fig
+
+    if df_trades is None or df_trades.empty:
+        return empty_msg("No trades logged.")
+    if "prob" not in df_trades.columns:
+        return empty_msg("Missing prob in trade log.")
+
+    d = df_trades.copy()
+    d["prob"] = pd.to_numeric(d["prob"], errors="coerce")
+    d = d.dropna(subset=["prob"])
+    if d.empty:
+        return empty_msg("prob is all NaN.")
+
+    d["p_bucket"] = pd.cut(d["prob"], bins=np.linspace(0, 1, 11), include_lowest=True)
+
+    g = d.groupby("p_bucket", observed=True).agg(
+        pnl=("pnl", "sum"),
+        stake=("stake", "sum"),
+        bets=("pnl", "size")
+    ).reset_index()
+
+    g["roi"] = np.where(g["stake"] > 0, 100.0 * g["pnl"] / g["stake"], 0.0)
+
+    # ✅ IMPORTANT: convert Interval -> string label for Plotly/Dash JSON serialization
+    g["p_bucket"] = g["p_bucket"].astype(str)
+
+    fig = px.line(g, x="p_bucket", y="roi", markers=True, title=title)
+    fig.update_layout(
+        template="plotly_white",
+        margin=dict(l=10, r=10, t=40, b=10),
+        xaxis_title="Predicted probability bucket",
+        yaxis_title="ROI (%)",
+    )
+    return fig
