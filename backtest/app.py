@@ -3,7 +3,7 @@ from dash import dcc, html, Input, Output, State, callback_context
 import plotly.graph_objs as go
 import pandas as pd
 import numpy as np
-from backtest_utils import TwoSidedKellyBacktester, TopPlayerKellyBacktester, TwoSidedBacktester
+from backtest_utils import TwoSidedKellyBacktester, TopPlayerKellyBacktester, TwoSidedBacktester, fig_calibration, fig_pnl_by_edge, fig_roi_by_odds, fig_prob_hist
 
 # Khởi tạo app
 app = dash.Dash(__name__, suppress_callback_exceptions=True)
@@ -236,6 +236,12 @@ def run_backtest(n_clicks, params, strategy):
             max_stake_pct=params.get('max-stake', 0.15)
         )
         bt.run(df)
+        trades = bt.trades_df  # created as above
+
+        fig_cal = fig_calibration(trades)
+        fig_edge = fig_pnl_by_edge(trades)
+        fig_odds = fig_roi_by_odds(trades)
+        fig_hist = fig_prob_hist(trades)
         title = 'Two-Sided Kelly Strategy'
         color = '#8e44ad'
         
