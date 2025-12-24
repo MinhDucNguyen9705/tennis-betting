@@ -4,6 +4,10 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import plotly.express as px
 
+POS_COLOR = "#2ca02c"
+NEG_COLOR = "#d62728"
+ZERO_COLOR = "#7f7f7f"
+
 class TwoSidedKellyBacktester:
     def __init__(self, initial_capital=1000, kelly_multiplier=0.5, max_stake_pct=0.15):
         """
@@ -39,7 +43,7 @@ class TwoSidedKellyBacktester:
         return min(f_final, self.max_stake_pct)
 
     def run(self, df, prob_col='Prob_P1', p1_col='Name_1', winner_col='Victory'):
-        print(f"--- BẮT ĐẦU KELLY 2 CHIỀU (Multiplier: {self.kelly_multiplier}) ---")
+        # print(f"--- BẮT ĐẦU KELLY 2 CHIỀU (Multiplier: {self.kelly_multiplier}) ---")
         
         bets_won = 0
         bets_lost = 0
@@ -49,7 +53,7 @@ class TwoSidedKellyBacktester:
         
         for idx, row in data.iterrows():
             if self.current_capital <= 0:
-                print("!!! CHÁY TÀI KHOẢN !!!")
+                # print("!!! CHÁY TÀI KHOẢN !!!")
                 break
                 
             try:
@@ -113,11 +117,10 @@ class TwoSidedKellyBacktester:
                 else:
                     skipped += 1
                     self.stakes_history.append(0)
-                # print(selected_bet, final_stake_pct)
+
                 odds = odds_p1 if selected_bet == "P1" else odds_p2
                 prob = prob_p1 if selected_bet == "P1" else prob_p2
                 payout = profit if is_win else -bet_amount
-                # print(odds, prob, selected_bet, final_stake_pct)
 
                 self.trades.append({
                     "date": row.get("tournament_date", None),
@@ -145,7 +148,7 @@ class TwoSidedKellyBacktester:
                 continue
             
             if self.current_capital <= 0:
-                print("!!! CHÁY TÀI KHOẢN !!!")
+                # print("!!! CHÁY TÀI KHOẢN !!!")
                 break
             if self.current_capital == self.capital_history[-1]:
                 continue
@@ -197,6 +200,7 @@ class TopPlayerKellyBacktester:
         
         self.capital_history = [initial_capital]
         self.metrics = {}
+        self.trades = []
 
     def calculate_kelly_stake(self, prob, odds):
         """Tính toán Kelly Stake (dùng chung logic chuẩn)"""
@@ -212,7 +216,7 @@ class TopPlayerKellyBacktester:
     def run(self, df, prob_col='Prob_P1', p1_col='Name_1', 
             rank1_col='Ranking_1', rank2_col='Ranking_2', winner_col='Victory'):
         
-        print(f"--- BẮT ĐẦU: TOP {self.top_n} STRATEGY (Kelly x{self.kelly_multiplier}) ---")
+        # print(f"--- BẮT ĐẦU: TOP {self.top_n} STRATEGY (Kelly x{self.kelly_multiplier}) ---")
         
         bets_won = 0
         bets_lost = 0
@@ -223,7 +227,7 @@ class TopPlayerKellyBacktester:
         
         for idx, row in data.iterrows():
             if self.current_capital <= 0:
-                print("!!! CHÁY TÀI KHOẢN !!!")
+                # print("!!! CHÁY TÀI KHOẢN !!!")
                 break
             
             # =================================================
@@ -307,6 +311,32 @@ class TopPlayerKellyBacktester:
                     bets_lost += 1
             else:
                 skipped_no_edge += 1
+            
+            odds = odds_p1 if selected_bet == "P1" else odds_p2
+            prob = prob_p1 if selected_bet == "P1" else prob_p2
+            payout = profit if is_win else -bet_amount
+
+            self.trades.append({
+                "date": row.get("tournament_date", None),
+                # "tournament_type": row.get("tournament_type", None),
+                "tournament_level": row.get("tournament_level", None),
+                "surface": row.get("tournament_surface", row.get("surface", None)),
+                "round": row.get("round", None),
+
+                "bet_side": selected_bet,
+                "prob": float(prob),
+                "odds": float(odds),
+                "stake": float(bet_amount),
+                "pnl": float(payout),
+                "is_win": int(is_win),
+
+                # optional rank analysis if columns exist
+                "rank1": row.get("Ranking_1", None),
+                "rank2": row.get("Ranking_2", None),
+                "rank_diff": (row.get("Ranking_2", None) - row.get("Ranking_1", None))
+                            if (pd.notna(row.get("Ranking_1", None)) and pd.notna(row.get("Ranking_2", None)))
+                            else None,
+            })
 
             if self.current_capital == self.capital_history[-1]:
                 continue
@@ -328,15 +358,15 @@ class TopPlayerKellyBacktester:
             dd = (peak - x) / peak
             if dd > max_dd: max_dd = dd
 
-        print("\n--- KẾT QUẢ TOP PLAYER STRATEGY ---")
-        print(f"Vốn cuối: ${self.current_capital:.2f} (Lãi: ${profit:.2f})")
-        print(f"ROI: {roi:.2f}% | Max Drawdown: {max_dd*100:.2f}%")
-        print("-" * 30)
-        print(f"Số trận đủ tiêu chuẩn Top {self.top_n}: {total_bets + skip_edge}")
-        print(f" -> Đã cược: {total_bets} (Win Rate: {wins/total_bets*100 if total_bets>0 else 0:.1f}%)")
-        print(f" -> Bỏ qua (Không thơm): {skip_edge}")
-        print(f"Số trận bị loại (Rank thấp): {skip_rank}")
-        print("-----------------------------------\n")
+        # print("\n--- KẾT QUẢ TOP PLAYER STRATEGY ---")
+        # print(f"Vốn cuối: ${self.current_capital:.2f} (Lãi: ${profit:.2f})")
+        # print(f"ROI: {roi:.2f}% | Max Drawdown: {max_dd*100:.2f}%")
+        # print("-" * 30)
+        # print(f"Số trận đủ tiêu chuẩn Top {self.top_n}: {total_bets + skip_edge}")
+        # print(f" -> Đã cược: {total_bets} (Win Rate: {wins/total_bets*100 if total_bets>0 else 0:.1f}%)")
+        # print(f" -> Bỏ qua (Không thơm): {skip_edge}")
+        # print(f"Số trận bị loại (Rank thấp): {skip_rank}")
+        # print("-----------------------------------\n")
 
     def plot_results(self):
         plt.figure(figsize=(10, 6))
@@ -356,9 +386,10 @@ class TwoSidedBacktester:
         self.threshold = threshold
         self.capital_history = [initial_capital]
         self.metrics = {}
+        self.trades = []
 
     def run(self, df, prob_col='Prob_P1', p1_col='Name_1', winner_col='Victory'):
-        print(f"--- BẮT ĐẦU BACKTEST 2 CHIỀU (Threshold: {self.threshold*100}%) ---")
+        # print(f"--- BẮT ĐẦU BACKTEST 2 CHIỀU (Threshold: {self.threshold*100}%) ---")
         
         bets_won = 0
         bets_lost = 0
@@ -368,7 +399,7 @@ class TwoSidedBacktester:
         
         for idx, row in data.iterrows():
             if self.current_capital <= 0:
-                print("!!! CHÁY TÀI KHOẢN !!!")
+                # print("!!! CHÁY TÀI KHOẢN !!!")
                 break
             # 1. LẤY DỮ LIỆU CƠ BẢN
             name_1 = row[p1_col]
@@ -414,10 +445,12 @@ class TwoSidedBacktester:
                 selected_bet = 'P2'
             
             # 4. XỬ LÝ KẾT QUẢ CƯỢC
+            is_win = False
             if selected_bet == 'P1':
                 if p1_outcome == 1: # P1 thắng thật
                     profit = self.bet_amount * (odds_p1 - 1)
                     self.current_capital += profit
+                    is_win = True
                     bets_won += 1
                 else: # P1 thua
                     self.current_capital -= self.bet_amount
@@ -427,12 +460,39 @@ class TwoSidedBacktester:
                 if p1_outcome == 0: # P1 thua = P2 thắng thật
                     profit = self.bet_amount * (odds_p2 - 1)
                     self.current_capital += profit
+                    is_win = True
                     bets_won += 1
                 else: # P2 thua
                     self.current_capital -= self.bet_amount
                     bets_lost += 1
             else:
                 skipped += 1
+
+            odds = odds_p1 if selected_bet == "P1" else odds_p2
+            prob = prob_p1 if selected_bet == "P1" else prob_p2
+            payout = profit if is_win else -self.bet_amount
+
+            self.trades.append({
+                "date": row.get("tournament_date", None),
+                # "tournament_type": row.get("tournament_type", None),
+                "tournament_level": row.get("tournament_level", None),
+                "surface": row.get("tournament_surface", row.get("surface", None)),
+                "round": row.get("round", None),
+
+                "bet_side": selected_bet,
+                "prob": float(prob),
+                "odds": float(odds),
+                "stake": float(self.bet_amount),
+                "pnl": float(payout),
+                "is_win": int(is_win),
+
+                # optional rank analysis if columns exist
+                "rank1": row.get("Ranking_1", None),
+                "rank2": row.get("Ranking_2", None),
+                "rank_diff": (row.get("Ranking_2", None) - row.get("Ranking_1", None))
+                            if (pd.notna(row.get("Ranking_1", None)) and pd.notna(row.get("Ranking_2", None)))
+                            else None,
+            })
 
             if self.current_capital == self.capital_history[-1]:
                 continue
@@ -445,11 +505,11 @@ class TwoSidedBacktester:
         profit = self.current_capital - self.initial_capital
         roi = (profit / (total_bets * self.bet_amount) * 100) if total_bets > 0 else 0
         
-        print("\n--- KẾT QUẢ BACKTEST ---")
-        print(f"Lợi nhuận: ${profit:.2f}")
-        print(f"Tổng lệnh: {total_bets} (Bỏ qua: {skipped})")
-        print(f"ROI: {roi:.2f}%")
-        print("------------------------")
+        # print("\n--- KẾT QUẢ BACKTEST ---")
+        # print(f"Lợi nhuận: ${profit:.2f}")
+        # print(f"Tổng lệnh: {total_bets} (Bỏ qua: {skipped})")
+        # print(f"ROI: {roi:.2f}%")
+        # print("------------------------")
     
     def plot_equity_curve(self):
         plt.figure(figsize=(10, 6))
@@ -494,12 +554,32 @@ def fig_profit_by(df_trades, col="tournament_level", title="Profit by Tournament
         return _empty_msg(title, "No trades logged (bt.trades is empty).")
     if col not in df_trades.columns:
         return _empty_msg(title, f"Missing column: {col}")
+
     g = df_trades.groupby(col, dropna=False)["pnl"].sum().reset_index()
     g[col] = g[col].fillna("(Unknown)")
     if g.empty:
         return _empty_msg(title, "No data after grouping.")
-    fig = px.bar(g.sort_values("pnl", ascending=False), x=col, y="pnl", title=title)
-    fig.update_layout(template="plotly_white", margin=dict(l=10, r=10, t=40, b=10))
+
+    g = g.sort_values("pnl", ascending=False)
+
+    colors = [
+        POS_COLOR if v > 0 else NEG_COLOR if v < 0 else ZERO_COLOR
+        for v in g["pnl"]
+    ]
+
+    fig = go.Figure(go.Bar(
+        x=g[col],
+        y=g["pnl"],
+        marker_color=colors,
+        hovertemplate=f"{col}=%{{x}}<br>PnL=%{{y:.2f}}<extra></extra>"
+    ))
+
+    fig.update_layout(
+        title=title,
+        template="plotly_white",
+        margin=dict(l=10, r=10, t=40, b=10),
+        yaxis_title="Profit",
+    )
     return fig
 
 def fig_roi_by_rankdiff(df_trades, title="ROI by Rank Difference Bucket"):
@@ -513,7 +593,8 @@ def fig_roi_by_rankdiff(df_trades, title="ROI by Rank Difference Bucket"):
         return _empty_msg(title, "rank_diff is all NaN.")
 
     bins = [-9999, -200, -100, -50, -20, 0, 20, 50, 100, 200, 9999]
-    labels = ["<-200","-200:-100","-100:-50","-50:-20","-20:0","0:20","20:50","50:100","100:200",">200"]
+    labels = ["<-200","-200:-100","-100:-50","-50:-20","-20:0",
+              "0:20","20:50","50:100","100:200",">200"]
     d["rank_bucket"] = pd.cut(d["rank_diff"], bins=bins, labels=labels)
 
     g = d.groupby("rank_bucket", observed=True).agg(
@@ -521,11 +602,33 @@ def fig_roi_by_rankdiff(df_trades, title="ROI by Rank Difference Bucket"):
         stake=("stake", "sum"),
         bets=("pnl", "size"),
     ).reset_index()
-    g["roi"] = (g["pnl"] / g["stake"]).replace([np.inf, -np.inf], np.nan) * 100
-    g["roi"] = g["roi"].fillna(0)
 
-    fig = px.bar(g, x="rank_bucket", y="roi", title=title, hover_data=["bets", "pnl", "stake"])
-    fig.update_layout(template="plotly_white", margin=dict(l=10, r=10, t=40, b=10))
+    g["roi"] = np.where(g["stake"] > 0, 100.0 * g["pnl"] / g["stake"], 0.0)
+
+    colors = [
+        POS_COLOR if v > 0 else NEG_COLOR if v < 0 else ZERO_COLOR
+        for v in g["roi"]
+    ]
+
+    fig = go.Figure(go.Bar(
+        x=g["rank_bucket"].astype(str),
+        y=g["roi"],
+        marker_color=colors,
+        hovertemplate=(
+            "Rank bucket=%{x}<br>"
+            "ROI=%{y:.2f}%<br>"
+            "Bets=%{customdata[0]}<br>"
+            "PnL=%{customdata[1]:.2f}<extra></extra>"
+        ),
+        customdata=np.stack([g["bets"], g["pnl"]], axis=-1)
+    ))
+
+    fig.update_layout(
+        title=title,
+        template="plotly_white",
+        margin=dict(l=10, r=10, t=40, b=10),
+        yaxis_title="ROI (%)",
+    )
     return fig
 
 def fig_pnl_by_prob_bucket(df_trades, title="ROI by Predicted Probability Bucket"):
@@ -559,15 +662,81 @@ def fig_pnl_by_prob_bucket(df_trades, title="ROI by Predicted Probability Bucket
     ).reset_index()
 
     g["roi"] = np.where(g["stake"] > 0, 100.0 * g["pnl"] / g["stake"], 0.0)
-
-    # ✅ IMPORTANT: convert Interval -> string label for Plotly/Dash JSON serialization
     g["p_bucket"] = g["p_bucket"].astype(str)
 
-    fig = px.line(g, x="p_bucket", y="roi", markers=True, title=title)
+    marker_colors = [
+        POS_COLOR if v > 0 else NEG_COLOR if v < 0 else ZERO_COLOR
+        for v in g["roi"]
+    ]
+
+    fig = go.Figure()
+
+    # Line (neutral)
+    fig.add_trace(go.Scatter(
+        x=g["p_bucket"],
+        y=g["roi"],
+        mode="lines",
+        line=dict(color="#636efa", width=2),
+        hoverinfo="skip"
+    ))
+
+    # Markers (colored by ROI sign)
+    fig.add_trace(go.Scatter(
+        x=g["p_bucket"],
+        y=g["roi"],
+        mode="markers",
+        marker=dict(size=9, color=marker_colors),
+        hovertemplate="Prob=%{x}<br>ROI=%{y:.2f}%<extra></extra>"
+    ))
+
     fig.update_layout(
+        title=title,
         template="plotly_white",
         margin=dict(l=10, r=10, t=40, b=10),
         xaxis_title="Predicted probability bucket",
         yaxis_title="ROI (%)",
+    )
+    return fig
+
+def fig_bet_winloss_pct(df_trades: pd.DataFrame, title="Bet Win/Loss %") -> go.Figure:
+    def empty(msg):
+        fig = go.Figure()
+        fig.update_layout(
+            title=title,
+            template="plotly_white",
+            margin=dict(l=10, r=10, t=40, b=10),
+            annotations=[dict(text=msg, x=0.5, y=0.5, showarrow=False)]
+        )
+        return fig
+
+    if df_trades is None or df_trades.empty:
+        return empty("No trades logged.")
+    if "is_win" not in df_trades.columns:
+        return empty("Missing is_win in trade log.")
+
+    wins = int((df_trades["is_win"] == 1).sum())
+    losses = int((df_trades["is_win"] == 0).sum())
+    total = wins + losses
+    if total == 0:
+        return empty("No win/loss rows.")
+
+    labels = ["Win", "Loss"]
+    values = [wins, losses]
+
+    fig = go.Figure(go.Pie(
+        labels=labels,
+        values=values,
+        hole=0.55,
+        sort=False,  # keep Win then Loss
+        marker=dict(colors=["#2ca02c", "#d62728"]),  # fixed colors
+        textinfo="percent+label",
+        hovertemplate="%{label}<br>%{value} bets (%{percent})<extra></extra>",
+    ))
+
+    fig.update_layout(
+        title=dict(text=title, x=0.5),
+        template="plotly_white",
+        margin=dict(l=10, r=10, t=40, b=10),
+        legend=dict(orientation="h", yanchor="bottom", y=-0.15, xanchor="center", x=0.5)
     )
     return fig

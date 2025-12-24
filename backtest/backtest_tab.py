@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 import pandas as pd
 import dash_bootstrap_components as dbc
 
-from .backtest_utils import TwoSidedKellyBacktester, TopPlayerKellyBacktester, TwoSidedBacktester, trades_df, fig_profit_by, fig_roi_by_rankdiff, fig_pnl_by_prob_bucket
+from .backtest_utils import TwoSidedKellyBacktester, TopPlayerKellyBacktester, TwoSidedBacktester, trades_df, fig_profit_by, fig_roi_by_rankdiff, fig_pnl_by_prob_bucket, fig_bet_winloss_pct
 
 def read_output_model():
     test_df = pd.read_csv('test_df.csv')
@@ -17,25 +17,6 @@ def make_backtest_layout():
         dcc.Store(id="bt_params_store"),
 
         dbc.Row([
-            dbc.Col(dbc.Card(dbc.CardBody([
-                html.Div("Backtest Strategy", style={"fontSize": "18px", "fontWeight": "600", "marginBottom": "10px"}),
-                dcc.Dropdown(
-                    id="bt_strategy",
-                    options=[
-                        {"label": "Two-Sided Kelly", "value": "kelly"},
-                        {"label": "Top Player Kelly", "value": "top_player"},
-                        {"label": "Two-Sided Simple", "value": "simple"},
-                    ],
-                    value="kelly",
-                    clearable=False,
-                ),
-                html.Div(id="bt_params_panel", style={"marginTop": "12px"}),
-                html.Button("🚀 Run Backtest", id="bt_run", n_clicks=0,
-                            style={"width": "100%", "marginTop": "12px", "padding": "12px",
-                                   "borderRadius": "8px", "border": "none",
-                                   "backgroundColor": "#27ae60", "color": "white",
-                                   "fontWeight": "700"}),
-            ])), width=4),
 
             dbc.Col(dbc.Card(dbc.CardBody([
                 dbc.Row([
@@ -60,14 +41,34 @@ def make_backtest_layout():
                 dcc.Loading(dcc.Graph(id="bt_equity", config={"displayModeBar": False}, style={"height": "420px"})),
                 html.Div(id="bt_stats_table", style={"marginTop": "10px"}),
             ])), width=8),
+
+            dbc.Col(dbc.Card(dbc.CardBody([
+                html.Div("Backtest Strategy", style={"fontSize": "18px", "fontWeight": "600", "marginBottom": "10px"}),
+                dcc.Dropdown(
+                    id="bt_strategy",
+                    options=[
+                        {"label": "Two-Sided Kelly", "value": "kelly"},
+                        {"label": "Top Player Kelly", "value": "top_player"},
+                        {"label": "Two-Sided Simple", "value": "simple"},
+                    ],
+                    value="kelly",
+                    clearable=False,
+                ),
+                html.Div(id="bt_params_panel", style={"marginTop": "12px"}),
+                html.Button("🚀 Run Backtest", id="bt_run", n_clicks=0,
+                            style={"width": "100%", "marginTop": "12px", "padding": "12px",
+                                   "borderRadius": "8px", "border": "none",
+                                   "backgroundColor": "#27ae60", "color": "white",
+                                   "fontWeight": "700"}),
+            ])), width=4),
         ], className="g-3"),
 
         html.Div(style={"height": "14px"}),
         
         dbc.Row([
             dbc.Col(dbc.Card(dbc.CardBody([
-                html.Div("Profit by Tournament Type", style={"fontWeight": 600, "marginBottom": 8}),
-                dcc.Graph(id="bt_profit_by_type", config={"displayModeBar": False}, style={"height": "320px"})
+                html.Div("ROI by Probability Bucket", style={"fontWeight": 600, "marginBottom": 8}),
+                dcc.Graph(id="bt_winloss_pct", config={"displayModeBar": False}, style={"height": "320px"})
             ])), width=6),
 
             dbc.Col(dbc.Card(dbc.CardBody([
@@ -80,9 +81,14 @@ def make_backtest_layout():
 
         dbc.Row([
             dbc.Col(dbc.Card(dbc.CardBody([
+                html.Div("Profit by Tournament Type", style={"fontWeight": 600, "marginBottom": 8}),
+                dcc.Graph(id="bt_profit_by_type", config={"displayModeBar": False}, style={"height": "320px"})
+            ])), width=6),
+            
+            dbc.Col(dbc.Card(dbc.CardBody([
                 html.Div("ROI by Probability Bucket", style={"fontWeight": 600, "marginBottom": 8}),
                 dcc.Graph(id="bt_pnl_by_prob_bucket", config={"displayModeBar": False}, style={"height": "320px"})
-            ])), width=12),
+            ])), width=6),
         ], className="g-3"),
     ])
 
@@ -168,9 +174,10 @@ def register_backtest_callbacks(app, load_backtest_df_func):
         Output("bt_kpi_final", "children"),
         Output("bt_kpi_dd", "children"),
         Output("bt_equity", "figure"),
-        Output("bt_profit_by_type", "figure"),        # NEW
-        Output("bt_roi_by_rankdiff", "figure"),       # NEW
-        Output("bt_pnl_by_prob_bucket", "figure"),    # NEW
+        Output("bt_profit_by_type", "figure"), 
+        Output("bt_roi_by_rankdiff", "figure"), 
+        Output("bt_pnl_by_prob_bucket", "figure"),  
+        Output("bt_winloss_pct", "figure"),
         Output("bt_stats_table", "children"),
         Input("bt_run", "n_clicks"),
         State("bt_params_store", "data"),
@@ -228,6 +235,7 @@ def register_backtest_callbacks(app, load_backtest_df_func):
         fig_type = fig_profit_by(t, col="tournament_level", title="Profit by Tournament Level")
         fig_rank = fig_roi_by_rankdiff(t, title="ROI by Rank Difference Bucket")
         fig_prob = fig_pnl_by_prob_bucket(t, title="ROI by Predicted Probability Bucket")
+        fig_wl = fig_bet_winloss_pct(t)
 
         # KPIs
         profit = bt.current_capital - bt.initial_capital
@@ -266,4 +274,4 @@ def register_backtest_callbacks(app, load_backtest_df_func):
         ])
 
         # ✅ IMPORTANT: return order must match Outputs order
-        return k_profit, k_roi, k_final, k_dd, fig, fig_type, fig_rank, fig_prob, stats
+        return k_profit, k_roi, k_final, k_dd, fig, fig_type, fig_rank, fig_prob, fig_wl, stats

@@ -1,4 +1,4 @@
-PARQUET_GLOB = r"D:/OneDrive - Hanoi University of Science and Technology/Domain Basics/Introduction to Business Analytics/data_tennis_match_reduced/parquet/matches_*.parquet"
+PARQUET_GLOB = r"data_tennis_match_reduced/parquet/matches_*.parquet"
 
 LATEST_SKILLS = {
     "Aces_Percentage",
