@@ -572,7 +572,7 @@ def run_inference(
     
     # Predict
     X = df[features].fillna(-1).values
-    proba = model.predict_proba(X)[:, 1]
+    proba = model.predict_proba(X)[:, 0]
     pred = (proba >= threshold).astype(int)
     
     # Create result dataframe with necessary columns for backtesting
