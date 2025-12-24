@@ -96,8 +96,15 @@ class TwoSidedKellyBacktester:
                 if selected_bet:
                     bet_amount = self.current_capital * final_stake_pct
                     
+                    # Skip if bet is too small (less than $1)
+                    if bet_amount < 1.0:
+                        skipped += 1
+                        self.stakes_history.append(0)
+                        continue
+                    
                     # Logic thắng thua
                     is_win = False
+                    profit = 0.0  # Initialize profit
                     if selected_bet == 'P1' and p1_outcome == 1:
                         is_win = True
                         profit = bet_amount * (odds_p1 - 1)
@@ -114,35 +121,39 @@ class TwoSidedKellyBacktester:
                         bets_lost += 1
                         
                     self.stakes_history.append(final_stake_pct)
+
+                    # Log trade only when bet is placed
+                    odds = odds_p1 if selected_bet == "P1" else odds_p2
+                    prob = prob_p1 if selected_bet == "P1" else prob_p2
+                    payout = profit if is_win else -bet_amount
+
+                    self.trades.append({
+                        "date": row.get("tournament_date", None),
+                        "tournament": row.get("tournament", None),
+                        "tournament_level": row.get("tournament_level", None),
+                        "surface": row.get("tournament_surface", row.get("surface", None)),
+                        "round": row.get("round", None),
+                        
+                        "player1": row.get("Name_1", None),
+                        "player2": row.get("Name_2", None),
+
+                        "bet_side": selected_bet,
+                        "prob": float(prob),
+                        "odds": float(odds),
+                        "stake": float(bet_amount),
+                        "pnl": float(payout),
+                        "is_win": int(is_win),
+
+                        # optional rank analysis if columns exist
+                        "rank1": row.get("Ranking_1", None),
+                        "rank2": row.get("Ranking_2", None),
+                        "rank_diff": (row.get("Ranking_2", None) - row.get("Ranking_1", None))
+                                    if (pd.notna(row.get("Ranking_1", None)) and pd.notna(row.get("Ranking_2", None)))
+                                    else None,
+                    })
                 else:
                     skipped += 1
                     self.stakes_history.append(0)
-
-                odds = odds_p1 if selected_bet == "P1" else odds_p2
-                prob = prob_p1 if selected_bet == "P1" else prob_p2
-                payout = profit if is_win else -bet_amount
-
-                self.trades.append({
-                    "date": row.get("tournament_date", None),
-                    # "tournament_type": row.get("tournament_type", None),
-                    "tournament_level": row.get("tournament_level", None),
-                    "surface": row.get("tournament_surface", row.get("surface", None)),
-                    "round": row.get("round", None),
-
-                    "bet_side": selected_bet,
-                    "prob": float(prob),
-                    "odds": float(odds),
-                    "stake": float(bet_amount),
-                    "pnl": float(payout),
-                    "is_win": int(is_win),
-
-                    # optional rank analysis if columns exist
-                    "rank1": row.get("Ranking_1", None),
-                    "rank2": row.get("Ranking_2", None),
-                    "rank_diff": (row.get("Ranking_2", None) - row.get("Ranking_1", None))
-                                if (pd.notna(row.get("Ranking_1", None)) and pd.notna(row.get("Ranking_2", None)))
-                                else None,
-                })
 
             except Exception as e:
                 continue
@@ -294,7 +305,17 @@ class TopPlayerKellyBacktester:
             # Vào lệnh
             if selected_bet:
                 bet_amount = self.current_capital * final_stake_pct
+                
+                # Skip if bet is too small (less than $1)
+                if bet_amount < 1.0:
+                    skipped_no_edge += 1
+                    if self.current_capital == self.capital_history[-1]:
+                        continue
+                    self.capital_history.append(self.current_capital)
+                    continue
+                
                 is_win = False
+                profit = 0.0  # Initialize profit
                 
                 if selected_bet == 'P1' and p1_outcome == 1:
                     is_win = True
@@ -309,34 +330,38 @@ class TopPlayerKellyBacktester:
                 else:
                     self.current_capital -= bet_amount
                     bets_lost += 1
+                
+                # Log trade only when bet is placed
+                odds = odds_p1 if selected_bet == "P1" else odds_p2
+                prob = prob_p1 if selected_bet == "P1" else prob_p2
+                payout = profit if is_win else -bet_amount
+
+                self.trades.append({
+                    "date": row.get("tournament_date", None),
+                    "tournament": row.get("tournament", None),
+                    "tournament_level": row.get("tournament_level", None),
+                    "surface": row.get("tournament_surface", row.get("surface", None)),
+                    "round": row.get("round", None),
+                    
+                    "player1": row.get("Name_1", None),
+                    "player2": row.get("Name_2", None),
+
+                    "bet_side": selected_bet,
+                    "prob": float(prob),
+                    "odds": float(odds),
+                    "stake": float(bet_amount),
+                    "pnl": float(payout),
+                    "is_win": int(is_win),
+
+                    # optional rank analysis if columns exist
+                    "rank1": row.get("Ranking_1", None),
+                    "rank2": row.get("Ranking_2", None),
+                    "rank_diff": (row.get("Ranking_2", None) - row.get("Ranking_1", None))
+                                if (pd.notna(row.get("Ranking_1", None)) and pd.notna(row.get("Ranking_2", None)))
+                                else None,
+                })
             else:
                 skipped_no_edge += 1
-            
-            odds = odds_p1 if selected_bet == "P1" else odds_p2
-            prob = prob_p1 if selected_bet == "P1" else prob_p2
-            payout = profit if is_win else -bet_amount
-
-            self.trades.append({
-                "date": row.get("tournament_date", None),
-                # "tournament_type": row.get("tournament_type", None),
-                "tournament_level": row.get("tournament_level", None),
-                "surface": row.get("tournament_surface", row.get("surface", None)),
-                "round": row.get("round", None),
-
-                "bet_side": selected_bet,
-                "prob": float(prob),
-                "odds": float(odds),
-                "stake": float(bet_amount),
-                "pnl": float(payout),
-                "is_win": int(is_win),
-
-                # optional rank analysis if columns exist
-                "rank1": row.get("Ranking_1", None),
-                "rank2": row.get("Ranking_2", None),
-                "rank_diff": (row.get("Ranking_2", None) - row.get("Ranking_1", None))
-                            if (pd.notna(row.get("Ranking_1", None)) and pd.notna(row.get("Ranking_2", None)))
-                            else None,
-            })
 
             if self.current_capital == self.capital_history[-1]:
                 continue
@@ -446,6 +471,13 @@ class TwoSidedBacktester:
             
             # 4. XỬ LÝ KẾT QUẢ CƯỢC
             is_win = False
+            profit = 0.0  # Initialize profit
+            
+            # Skip if we don't have enough capital for this bet
+            if selected_bet and self.current_capital < self.bet_amount:
+                skipped += 1
+                selected_bet = None  # Don't place the bet
+            
             if selected_bet == 'P1':
                 if p1_outcome == 1: # P1 thắng thật
                     profit = self.bet_amount * (odds_p1 - 1)
@@ -468,31 +500,36 @@ class TwoSidedBacktester:
             else:
                 skipped += 1
 
-            odds = odds_p1 if selected_bet == "P1" else odds_p2
-            prob = prob_p1 if selected_bet == "P1" else prob_p2
-            payout = profit if is_win else -self.bet_amount
+            # Only log trade when bet is placed
+            if selected_bet:
+                odds = odds_p1 if selected_bet == "P1" else odds_p2
+                prob = prob_p1 if selected_bet == "P1" else prob_p2
+                payout = profit if is_win else -self.bet_amount
 
-            self.trades.append({
-                "date": row.get("tournament_date", None),
-                # "tournament_type": row.get("tournament_type", None),
-                "tournament_level": row.get("tournament_level", None),
-                "surface": row.get("tournament_surface", row.get("surface", None)),
-                "round": row.get("round", None),
+                self.trades.append({
+                    "date": row.get("tournament_date", None),
+                    "tournament": row.get("tournament", None),
+                    "tournament_level": row.get("tournament_level", None),
+                    "surface": row.get("tournament_surface", row.get("surface", None)),
+                    "round": row.get("round", None),
+                    
+                    "player1": row.get("Name_1", None),
+                    "player2": row.get("Name_2", None),
 
-                "bet_side": selected_bet,
-                "prob": float(prob),
-                "odds": float(odds),
-                "stake": float(self.bet_amount),
-                "pnl": float(payout),
-                "is_win": int(is_win),
+                    "bet_side": selected_bet,
+                    "prob": float(prob),
+                    "odds": float(odds),
+                    "stake": float(self.bet_amount),
+                    "pnl": float(payout),
+                    "is_win": int(is_win),
 
-                # optional rank analysis if columns exist
-                "rank1": row.get("Ranking_1", None),
-                "rank2": row.get("Ranking_2", None),
-                "rank_diff": (row.get("Ranking_2", None) - row.get("Ranking_1", None))
-                            if (pd.notna(row.get("Ranking_1", None)) and pd.notna(row.get("Ranking_2", None)))
-                            else None,
-            })
+                    # optional rank analysis if columns exist
+                    "rank1": row.get("Ranking_1", None),
+                    "rank2": row.get("Ranking_2", None),
+                    "rank_diff": (row.get("Ranking_2", None) - row.get("Ranking_1", None))
+                                if (pd.notna(row.get("Ranking_1", None)) and pd.notna(row.get("Ranking_2", None)))
+                                else None,
+                })
 
             if self.current_capital == self.capital_history[-1]:
                 continue
@@ -516,6 +553,343 @@ class TwoSidedBacktester:
         plt.plot(self.capital_history, color='green')
         plt.axhline(y=self.initial_capital, color='r', linestyle='--')
         plt.title('Equity Curve (Two-Sided Betting)')
+        plt.show()
+
+
+class FixedStakeBacktester:
+    """
+    Simple Fixed Stake Backtester.
+    
+    Bets a fixed amount on the predicted winner (based on model probability).
+    No Kelly sizing - just bet a fixed amount each time.
+    """
+    
+    def __init__(self, initial_capital=1000, stake_amount=100, min_prob=0.5):
+        """
+        :param initial_capital: Starting capital
+        :param stake_amount: Fixed amount to bet each time
+        :param min_prob: Minimum probability to place a bet (default 0.5)
+        """
+        self.initial_capital = initial_capital
+        self.current_capital = initial_capital
+        self.stake_amount = stake_amount
+        self.min_prob = min_prob
+        
+        self.capital_history = [initial_capital]
+        self.metrics = {}
+        self.trades = []
+    
+    def run(self, df, prob_col='Prob_P1', p1_col='Name_1', winner_col='Victory'):
+        """
+        Run backtest on the dataframe.
+        
+        Betting logic:
+        - If Prob_P1 >= min_prob: Bet on P1
+        - If Prob_P1 < (1 - min_prob): Bet on P2
+        - Otherwise: Skip
+        """
+        bets_won = 0
+        bets_lost = 0
+        skipped = 0
+        
+        data = df.copy()
+        
+        for idx, row in data.iterrows():
+            if self.current_capital <= 0:
+                break
+            
+            # Check if we have enough capital
+            if self.current_capital < self.stake_amount:
+                skipped += 1
+                continue
+            
+            try:
+                prob_p1 = row[prob_col]
+                
+                # Get odds
+                odds_p1 = row.get('PS_1', None)
+                odds_p2 = row.get('PS_2', None)
+                
+                if pd.isna(odds_p1) or pd.isna(odds_p2):
+                    skipped += 1
+                    continue
+                
+                # Determine actual outcome
+                winner = row[winner_col]
+                p1_outcome = 1 if winner == 0 else 0
+                
+                # Decide which side to bet
+                selected_bet = None
+                bet_amount = self.stake_amount
+                
+                if prob_p1 >= self.min_prob:
+                    selected_bet = 'P1'
+                elif prob_p1 < (1 - self.min_prob):
+                    selected_bet = 'P2'
+                
+                if selected_bet is None:
+                    skipped += 1
+                    continue
+                
+                # Calculate result
+                is_win = False
+                profit = 0
+                
+                if selected_bet == 'P1':
+                    if p1_outcome == 1:
+                        is_win = True
+                        profit = bet_amount * (odds_p1 - 1)
+                        self.current_capital += profit
+                        bets_won += 1
+                    else:
+                        self.current_capital -= bet_amount
+                        bets_lost += 1
+                else:  # P2
+                    if p1_outcome == 0:
+                        is_win = True
+                        profit = bet_amount * (odds_p2 - 1)
+                        self.current_capital += profit
+                        bets_won += 1
+                    else:
+                        self.current_capital -= bet_amount
+                        bets_lost += 1
+                
+                # Record trade
+                odds = odds_p1 if selected_bet == 'P1' else odds_p2
+                prob = prob_p1 if selected_bet == 'P1' else (1 - prob_p1)
+                payout = profit if is_win else -bet_amount
+                
+                self.trades.append({
+                    "date": row.get("tournament_date", None),
+                    "tournament": row.get("tournament", None),
+                    "tournament_level": row.get("tournament_level", None),
+                    "surface": row.get("tournament_surface", row.get("surface", None)),
+                    "round": row.get("round", None),
+                    
+                    "player1": row.get("Name_1", None),
+                    "player2": row.get("Name_2", None),
+                    
+                    "bet_side": selected_bet,
+                    "prob": float(prob),
+                    "odds": float(odds),
+                    "stake": float(bet_amount),
+                    "pnl": float(payout),
+                    "is_win": int(is_win),
+                    "rank1": row.get("Ranking_1", None),
+                    "rank2": row.get("Ranking_2", None),
+                    "rank_diff": (row.get("Ranking_2", None) - row.get("Ranking_1", None))
+                                if (pd.notna(row.get("Ranking_1", None)) and pd.notna(row.get("Ranking_2", None)))
+                                else None,
+                })
+                
+            except Exception as e:
+                skipped += 1
+                continue
+            
+            # Update capital history
+            if self.current_capital != self.capital_history[-1]:
+                self.capital_history.append(self.current_capital)
+        
+        self._generate_report(bets_won, bets_lost, skipped)
+    
+    def _generate_report(self, wins, losses, skipped):
+        total_bets = wins + losses
+        profit = self.current_capital - self.initial_capital
+        roi = (profit / (total_bets * self.stake_amount) * 100) if total_bets > 0 else 0
+        
+        self.metrics = {
+            'total_bets': total_bets,
+            'wins': wins,
+            'losses': losses,
+            'skipped': skipped,
+            'win_rate': wins / total_bets * 100 if total_bets > 0 else 0,
+            'profit': profit,
+            'roi': roi,
+        }
+    
+    def plot_equity_curve(self):
+        plt.figure(figsize=(10, 6))
+        plt.plot(self.capital_history, color='orange')
+        plt.axhline(y=self.initial_capital, color='r', linestyle='--')
+        plt.title(f'Equity Curve (Fixed Stake: ${self.stake_amount})')
+        plt.ylabel('Capital ($)')
+        plt.grid(True)
+        plt.show()
+
+
+class OddsOnlyBacktester:
+    """
+    Odds-Only Backtester - Uses only bookmaker odds to make betting decisions.
+    
+    Strategy: Bet on the favorite (lower odds) or underdog (higher odds) based on
+    odds thresholds, without using any model predictions.
+    """
+    
+    def __init__(self, initial_capital=1000, stake_amount=100, 
+                 bet_on='favorite', min_odds=1.2, max_odds=3.0):
+        """
+        :param initial_capital: Starting capital
+        :param stake_amount: Fixed amount to bet each time
+        :param bet_on: 'favorite' (lower odds) or 'underdog' (higher odds)
+        :param min_odds: Minimum odds to place a bet
+        :param max_odds: Maximum odds to place a bet
+        """
+        self.initial_capital = initial_capital
+        self.current_capital = initial_capital
+        self.stake_amount = stake_amount
+        self.bet_on = bet_on
+        self.min_odds = min_odds
+        self.max_odds = max_odds
+        
+        self.capital_history = [initial_capital]
+        self.metrics = {}
+        self.trades = []
+    
+    def run(self, df, prob_col='Prob_P1', p1_col='Name_1', winner_col='Victory'):
+        """
+        Run backtest using only odds information.
+        """
+        bets_won = 0
+        bets_lost = 0
+        skipped = 0
+        
+        data = df.copy()
+        
+        for idx, row in data.iterrows():
+            if self.current_capital <= 0:
+                break
+            
+            # Check if we have enough capital
+            if self.current_capital < self.stake_amount:
+                skipped += 1
+                continue
+            
+            try:
+                # Get odds
+                odds_p1 = row.get('PS_1', None)
+                odds_p2 = row.get('PS_2', None)
+                
+                if pd.isna(odds_p1) or pd.isna(odds_p2):
+                    skipped += 1
+                    continue
+                
+                # Determine actual outcome
+                winner = row[winner_col]
+                p1_outcome = 1 if winner == 0 else 0
+                
+                # Decide based on odds only
+                selected_bet = None
+                bet_odds = None
+                
+                if self.bet_on == 'favorite':
+                    # Bet on the player with lower odds (favorite)
+                    if odds_p1 < odds_p2:
+                        if self.min_odds <= odds_p1 <= self.max_odds:
+                            selected_bet = 'P1'
+                            bet_odds = odds_p1
+                    else:
+                        if self.min_odds <= odds_p2 <= self.max_odds:
+                            selected_bet = 'P2'
+                            bet_odds = odds_p2
+                else:  # underdog
+                    # Bet on the player with higher odds (underdog)
+                    if odds_p1 > odds_p2:
+                        if self.min_odds <= odds_p1 <= self.max_odds:
+                            selected_bet = 'P1'
+                            bet_odds = odds_p1
+                    else:
+                        if self.min_odds <= odds_p2 <= self.max_odds:
+                            selected_bet = 'P2'
+                            bet_odds = odds_p2
+                
+                if selected_bet is None:
+                    skipped += 1
+                    continue
+                
+                # Calculate result
+                is_win = False
+                profit = 0.0
+                bet_amount = self.stake_amount
+                
+                if selected_bet == 'P1':
+                    if p1_outcome == 1:
+                        is_win = True
+                        profit = bet_amount * (odds_p1 - 1)
+                        self.current_capital += profit
+                        bets_won += 1
+                    else:
+                        self.current_capital -= bet_amount
+                        bets_lost += 1
+                else:  # P2
+                    if p1_outcome == 0:
+                        is_win = True
+                        profit = bet_amount * (odds_p2 - 1)
+                        self.current_capital += profit
+                        bets_won += 1
+                    else:
+                        self.current_capital -= bet_amount
+                        bets_lost += 1
+                
+                # Record trade
+                odds = odds_p1 if selected_bet == 'P1' else odds_p2
+                implied_prob = 1.0 / odds if odds > 0 else 0
+                payout = profit if is_win else -bet_amount
+                
+                self.trades.append({
+                    "date": row.get("tournament_date", None),
+                    "tournament": row.get("tournament", None),
+                    "tournament_level": row.get("tournament_level", None),
+                    "surface": row.get("tournament_surface", row.get("surface", None)),
+                    "round": row.get("round", None),
+                    
+                    "player1": row.get("Name_1", None),
+                    "player2": row.get("Name_2", None),
+                    
+                    "bet_side": selected_bet,
+                    "prob": float(implied_prob),  # Use implied prob from odds
+                    "odds": float(odds),
+                    "stake": float(bet_amount),
+                    "pnl": float(payout),
+                    "is_win": int(is_win),
+                    "rank1": row.get("Ranking_1", None),
+                    "rank2": row.get("Ranking_2", None),
+                    "rank_diff": (row.get("Ranking_2", None) - row.get("Ranking_1", None))
+                                if (pd.notna(row.get("Ranking_1", None)) and pd.notna(row.get("Ranking_2", None)))
+                                else None,
+                })
+                
+            except Exception as e:
+                skipped += 1
+                continue
+            
+            # Update capital history
+            if self.current_capital != self.capital_history[-1]:
+                self.capital_history.append(self.current_capital)
+        
+        self._generate_report(bets_won, bets_lost, skipped)
+    
+    def _generate_report(self, wins, losses, skipped):
+        total_bets = wins + losses
+        profit = self.current_capital - self.initial_capital
+        roi = (profit / (total_bets * self.stake_amount) * 100) if total_bets > 0 else 0
+        
+        self.metrics = {
+            'total_bets': total_bets,
+            'wins': wins,
+            'losses': losses,
+            'skipped': skipped,
+            'win_rate': wins / total_bets * 100 if total_bets > 0 else 0,
+            'profit': profit,
+            'roi': roi,
+        }
+    
+    def plot_equity_curve(self):
+        plt.figure(figsize=(10, 6))
+        plt.plot(self.capital_history, color='purple')
+        plt.axhline(y=self.initial_capital, color='r', linestyle='--')
+        plt.title(f'Equity Curve (Odds Only - {self.bet_on.title()})')
+        plt.ylabel('Capital ($)')
+        plt.grid(True)
         plt.show()
 
 def trades_df(bt):
