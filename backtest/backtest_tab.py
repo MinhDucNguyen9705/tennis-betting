@@ -7,13 +7,14 @@ import dash_bootstrap_components as dbc
 from datetime import datetime, date
 
 from .backtest_utils import (
-    TwoSidedKellyBacktester, TopPlayerKellyBacktester, TwoSidedBacktester,
+    TwoSidedKellyBacktester, FlatKellyBacktester, TopPlayerKellyBacktester,
     FixedStakeBacktester, OddsOnlyBacktester, trades_df, fig_profit_by, fig_roi_by_rankdiff, 
     fig_pnl_by_prob_bucket, fig_bet_winloss_pct
 )
 from .backtest_pipeline import (
     validate_no_leakage, run_full_pipeline, train_model_only, run_backtest_only,
-    TRAINING_YEARS_AVAILABLE, BACKTEST_YEARS_AVAILABLE
+    TRAINING_YEARS_AVAILABLE, BACKTEST_YEARS_AVAILABLE,
+    load_pretrained_model, has_pretrained_model, list_pretrained_models
 )
 
 
@@ -61,6 +62,7 @@ def make_backtest_layout():
                                 {"label": "HistGradientBoosting", "value": "hist_gradient_boosting"},
                                 {"label": "RandomForest", "value": "random_forest"},
                                 {"label": "Logistic Regression", "value": "logistic_regression"},
+                                {"label": "SVM", "value": "svm"},
                                 {"label": "CatBoost", "value": "catboost"},
                             ],
                             value="random_forest",
@@ -70,36 +72,55 @@ def make_backtest_layout():
                     ]),
                 ], style={"marginBottom": "12px"}),
                 
-                # Training Years
+                # Pre-trained Model Toggle
                 dbc.Row([
                     dbc.Col([
-                        html.Label("Training Years", style={"fontWeight": "600", "marginBottom": "6px"}),
-                        dbc.Row([
-                            dbc.Col([
-                                html.Label("From:", style={"fontSize": "12px"}),
-                                dcc.Dropdown(
-                                    id="bt_train_year_start",
-                                    options=train_year_options,
-                                    value=2022,
-                                    clearable=False,
-                                    style={"width": "100%"}
-                                ),
-                            ], width=6),
-                            dbc.Col([
-                                html.Label("To:", style={"fontSize": "12px"}),
-                                dcc.Dropdown(
-                                    id="bt_train_year_end",
-                                    options=train_year_options,
-                                    value=2023,
-                                    clearable=False,
-                                    style={"width": "100%"}
-                                ),
-                            ], width=6),
-                        ]),
-                        html.Div(
-                            "Available: 2000-2024",
-                            style={"fontSize": "11px", "color": "#888", "marginTop": "4px"}
+                        dbc.Checklist(
+                            id="bt_use_pretrained",
+                            options=[{"label": " Use Pre-trained Model (2021-2023)", "value": "pretrained"}],
+                            value=[],
+                            inline=True,
+                            style={"marginBottom": "8px"}
                         ),
+                        html.Div(
+                            id="bt_pretrained_status",
+                            style={"fontSize": "11px", "color": "#888"}
+                        ),
+                    ]),
+                ], style={"marginBottom": "8px"}),
+                
+                # Training Years (hidden when using pre-trained)
+                html.Div(id="bt_training_years_container", children=[
+                    dbc.Row([
+                        dbc.Col([
+                            html.Label("Training Years", style={"fontWeight": "600", "marginBottom": "6px"}),
+                            dbc.Row([
+                                dbc.Col([
+                                    html.Label("From:", style={"fontSize": "12px"}),
+                                    dcc.Dropdown(
+                                        id="bt_train_year_start",
+                                        options=train_year_options,
+                                        value=2022,
+                                        clearable=False,
+                                        style={"width": "100%"}
+                                    ),
+                                ], width=6),
+                                dbc.Col([
+                                    html.Label("To:", style={"fontSize": "12px"}),
+                                    dcc.Dropdown(
+                                        id="bt_train_year_end",
+                                        options=train_year_options,
+                                        value=2023,
+                                        clearable=False,
+                                        style={"width": "100%"}
+                                    ),
+                                ], width=6),
+                            ]),
+                            html.Div(
+                                "Available: 2000-2024",
+                                style={"fontSize": "11px", "color": "#888", "marginTop": "4px"}
+                            ),
+                        ]),
                     ]),
                 ]),
             ])), width=4),
@@ -227,10 +248,10 @@ def make_backtest_layout():
                 dcc.Dropdown(
                     id="bt_strategy",
                     options=[
-                        {"label": "Two-Sided Kelly", "value": "kelly"},
-                        {"label": "Top Player Kelly", "value": "top_player"},
-                        {"label": "Two-Sided Simple", "value": "simple"},
-                        {"label": "Fixed Stake", "value": "fixed_stake"},
+                        {"label": "Fractional Kelly", "value": "kelly"},
+                        {"label": "Flat Kelly", "value": "flat_kelly"},
+                        {"label": "Top Player Kelly", "value": "kelly_top_player"},
+                        {"label": "Flat Staking", "value": "fixed_stake"},
                         {"label": "Odds Only", "value": "odds_only"},
                     ],
                     value="kelly",
@@ -397,6 +418,33 @@ def register_backtest_callbacks(app, load_backtest_df_func=None):
             ])
 
     # =========================================================
+    # Callback 1b: Toggle training years visibility based on pre-trained checkbox
+    # =========================================================
+    @app.callback(
+        Output("bt_training_years_container", "style"),
+        Output("bt_pretrained_status", "children"),
+        Output("bt_train_run", "disabled"),
+        Input("bt_use_pretrained", "value"),
+        Input("bt_model_type", "value"),
+    )
+    def toggle_pretrained_mode(use_pretrained, model_type):
+        if "pretrained" in (use_pretrained or []):
+            # Check if pretrained model exists
+            if has_pretrained_model(model_type):
+                status = html.Div([
+                    html.Span("✅ ", style={"color": "#27ae60"}),
+                    html.Span("Pre-trained model available", style={"color": "#27ae60"})
+                ])
+            else:
+                status = html.Div([
+                    html.Span("⚠️ ", style={"color": "#f39c12"}),
+                    html.Span("No pre-trained model found - will need to train", style={"color": "#f39c12"})
+                ])
+            return {"display": "none"}, status, True
+        else:
+            return {"display": "block"}, "", False
+
+    # =========================================================
     # Callback 2: Strategy parameters panel
     # =========================================================
     @app.callback(
@@ -413,32 +461,56 @@ def register_backtest_callbacks(app, load_backtest_df_func=None):
                           dcc.Input(id={"type": "bt_param", "name": "capital"}, type="number", value=1000,
                                     style={"width": "100%", "padding": "8px"})]),
                 html.Div([html.Div("Kelly multiplier", style=label_style),
-                          dcc.Slider(id={"type": "bt_param", "name": "kelly_mult"},
-                                     min=0.1, max=1.0, step=0.1, value=0.5,
-                                     marks={0.1: "0.1", 0.5: "0.5", 1.0: "1.0"})]),
+                          html.Div(dcc.Slider(id={"type": "bt_param", "name": "kelly_mult"},
+                                     min=0.1, max=0.5, step=0.05, value=0.25,
+                                     marks={0.1: "10%", 0.2: "20%", 0.3: "30%", 0.4: "40%", 0.5: "50%"}),
+                                   style={"padding": "0 10px", "marginBottom": "15px"})]),
                 html.Div([html.Div("Max stake %", style=label_style),
-                          dcc.Slider(id={"type": "bt_param", "name": "max_stake"},
-                                     min=0.05, max=0.3, step=0.05, value=0.15,
-                                     marks={0.05: "5%", 0.15: "15%", 0.3: "30%"})]),
+                          html.Div(dcc.Slider(id={"type": "bt_param", "name": "max_stake"},
+                                     min=0.02, max=0.15, step=0.01, value=0.05,
+                                     marks={0.02: "2%", 0.05: "5%", 0.08: "8%", 0.10: "10%", 0.12: "12%", 0.15: "15%"}),
+                                   style={"padding": "0 10px", "marginBottom": "15px"})]),
             ])
-        elif strategy == "top_player":
+        elif strategy == "flat_kelly":
+            return html.Div([
+                html.Div("Parameters", style={"fontWeight": 700, "marginBottom": "10px"}),
+                html.Div("Uses initial capital for bet sizing (prevents shrinking bets during drawdowns)",
+                         style={"fontSize": "11px", "color": "#888", "marginBottom": "10px", "fontStyle": "italic"}),
+                html.Div([html.Div("Initial capital", style=label_style),
+                          dcc.Input(id={"type": "bt_param", "name": "capital"}, type="number", value=1000,
+                                    style={"width": "100%", "padding": "8px"})]),
+                html.Div([html.Div("Kelly multiplier", style=label_style),
+                          html.Div(dcc.Slider(id={"type": "bt_param", "name": "kelly_mult"},
+                                     min=0.1, max=0.5, step=0.05, value=0.25,
+                                     marks={0.1: "10%", 0.2: "20%", 0.3: "30%", 0.4: "40%", 0.5: "50%"}),
+                                   style={"padding": "0 10px", "marginBottom": "15px"})]),
+                html.Div([html.Div("Max stake %", style=label_style),
+                          html.Div(dcc.Slider(id={"type": "bt_param", "name": "max_stake"},
+                                     min=0.02, max=0.15, step=0.01, value=0.08,
+                                     marks={0.02: "2%", 0.05: "5%", 0.08: "8%", 0.10: "10%", 0.12: "12%", 0.15: "15%"}),
+                                   style={"padding": "0 10px", "marginBottom": "15px"})]),
+            ])
+        elif strategy == "kelly_top_player":
             return html.Div([
                 html.Div("Parameters", style={"fontWeight": 700, "marginBottom": "10px"}),
                 html.Div([html.Div("Initial capital", style=label_style),
                           dcc.Input(id={"type": "bt_param", "name": "capital"}, type="number", value=1000,
                                     style={"width": "100%", "padding": "8px"})]),
                 html.Div([html.Div("Top N", style=label_style),
-                          dcc.Slider(id={"type": "bt_param", "name": "top_n"},
+                          html.Div(dcc.Slider(id={"type": "bt_param", "name": "top_n"},
                                      min=5, max=20, step=1, value=8,
-                                     marks={5: "5", 10: "10", 20: "20"})]),
+                                     marks={5: "5", 8: "8", 10: "10", 15: "15", 20: "20"}),
+                                   style={"padding": "0 10px", "marginBottom": "15px"})]),
                 html.Div([html.Div("Kelly multiplier", style=label_style),
-                          dcc.Slider(id={"type": "bt_param", "name": "kelly_mult"},
-                                     min=0.1, max=1.0, step=0.1, value=0.5,
-                                     marks={0.1: "0.1", 0.5: "0.5", 1.0: "1.0"})]),
+                          html.Div(dcc.Slider(id={"type": "bt_param", "name": "kelly_mult"},
+                                     min=0.1, max=0.5, step=0.05, value=0.25,
+                                     marks={0.1: "10%", 0.2: "20%", 0.3: "30%", 0.4: "40%", 0.5: "50%"}),
+                                   style={"padding": "0 10px", "marginBottom": "15px"})]),
                 html.Div([html.Div("Max stake %", style=label_style),
-                          dcc.Slider(id={"type": "bt_param", "name": "max_stake"},
-                                     min=0.05, max=0.3, step=0.05, value=0.15,
-                                     marks={0.05: "5%", 0.15: "15%", 0.3: "30%"})]),
+                          html.Div(dcc.Slider(id={"type": "bt_param", "name": "max_stake"},
+                                     min=0.02, max=0.15, step=0.01, value=0.05,
+                                     marks={0.02: "2%", 0.05: "5%", 0.08: "8%", 0.10: "10%", 0.12: "12%", 0.15: "15%"}),
+                                   style={"padding": "0 10px", "marginBottom": "15px"})]),
             ])
         elif strategy == "fixed_stake":
             return html.Div([
@@ -450,9 +522,10 @@ def register_backtest_callbacks(app, load_backtest_df_func=None):
                           dcc.Input(id={"type": "bt_param", "name": "stake_amount"}, type="number", value=100,
                                     style={"width": "100%", "padding": "8px"})]),
                 html.Div([html.Div("Min probability to bet", style=label_style),
-                          dcc.Slider(id={"type": "bt_param", "name": "min_prob"},
+                          html.Div(dcc.Slider(id={"type": "bt_param", "name": "min_prob"},
                                      min=0.5, max=0.7, step=0.05, value=0.5,
-                                     marks={0.5: "50%", 0.6: "60%", 0.7: "70%"})]),
+                                     marks={0.5: "50%", 0.6: "60%", 0.7: "70%"}),
+                                   style={"padding": "0 10px", "marginBottom": "15px"})]),
             ])
         elif strategy == "odds_only":
             return html.Div([
@@ -475,28 +548,18 @@ def register_backtest_callbacks(app, load_backtest_df_func=None):
                               style={"width": "100%"}
                           )]),
                 html.Div([html.Div("Min odds", style=label_style),
-                          dcc.Slider(id={"type": "bt_param", "name": "min_odds"},
+                          html.Div(dcc.Slider(id={"type": "bt_param", "name": "min_odds"},
                                      min=1.1, max=2.0, step=0.1, value=1.2,
-                                     marks={1.1: "1.1", 1.5: "1.5", 2.0: "2.0"})]),
+                                     marks={1.1: "1.1", 1.5: "1.5", 2.0: "2.0"}),
+                                   style={"padding": "0 10px", "marginBottom": "15px"})]),
                 html.Div([html.Div("Max odds", style=label_style),
-                          dcc.Slider(id={"type": "bt_param", "name": "max_odds"},
+                          html.Div(dcc.Slider(id={"type": "bt_param", "name": "max_odds"},
                                      min=1.5, max=5.0, step=0.5, value=3.0,
-                                     marks={1.5: "1.5", 3.0: "3.0", 5.0: "5.0"})]),
+                                     marks={1.5: "1.5", 3.0: "3.0", 5.0: "5.0"}),
+                                   style={"padding": "0 10px", "marginBottom": "15px"})]),
             ])
-        else:  # simple
-            return html.Div([
-                html.Div("Parameters", style={"fontWeight": 700, "marginBottom": "10px"}),
-                html.Div([html.Div("Initial capital", style=label_style),
-                          dcc.Input(id={"type": "bt_param", "name": "capital"}, type="number", value=1000,
-                                    style={"width": "100%", "padding": "8px"})]),
-                html.Div([html.Div("Bet amount", style=label_style),
-                          dcc.Input(id={"type": "bt_param", "name": "bet_amount"}, type="number", value=100,
-                                    style={"width": "100%", "padding": "8px"})]),
-                html.Div([html.Div("Edge threshold", style=label_style),
-                          dcc.Slider(id={"type": "bt_param", "name": "threshold"},
-                                     min=0.01, max=0.2, step=0.01, value=0.05,
-                                     marks={0.01: "1%", 0.1: "10%", 0.2: "20%"})]),
-            ])
+        else:
+            return html.Div()
 
     # =========================================================
     # Callback 3: Store parameters
@@ -542,6 +605,7 @@ def register_backtest_callbacks(app, load_backtest_df_func=None):
                 'hist_gradient_boosting': 'HistGradientBoosting',
                 'random_forest': 'RandomForest',
                 'logistic_regression': 'Logistic Regression',
+                'svm': 'SVM',
                 'catboost': 'CatBoost',
             }
             model_display_name = model_names.get(model_type, model_type)
@@ -602,32 +666,52 @@ def register_backtest_callbacks(app, load_backtest_df_func=None):
         State("bt_backtest_end", "date"),
         State("bt_params_store", "data"),
         State("bt_strategy", "value"),
+        State("bt_use_pretrained", "value"),
+        State("bt_model_type", "value"),
         prevent_initial_call=True,
     )
-    def bt_run(n_clicks, model_meta, backtest_start, backtest_end, params, strategy):
+    def bt_run(n_clicks, model_meta, backtest_start, backtest_end, params, strategy, use_pretrained, model_type):
         empty_fig = go.Figure().update_layout(template="plotly_white", margin=dict(l=10, r=10, t=40, b=10))
         empty_return = ("—", "—", "—", "—", empty_fig, empty_fig, empty_fig, empty_fig, empty_fig, html.Div(), [], [], "", None)
 
         if not n_clicks:
             return empty_return
         
-        # Check if model is trained
-        if not model_meta or "cache_key" not in model_meta:
-            empty_return_with_msg = list(empty_return)
-            empty_return_with_msg[9] = html.Div("⚠️ Please train model first!", style={"color": "#f39c12"})
-            return tuple(empty_return_with_msg)
+        # Check if using pre-trained model
+        using_pretrained = "pretrained" in (use_pretrained or [])
         
-        # Retrieve model from cache
-        cache_key = model_meta["cache_key"]
-        if cache_key not in _model_cache:
-            empty_return_with_msg = list(empty_return)
-            empty_return_with_msg[9] = html.Div("⚠️ Model expired. Please retrain.", style={"color": "#f39c12"})
-            return tuple(empty_return_with_msg)
-        
-        model_bundle = _model_cache[cache_key]
+        if using_pretrained:
+            # Load pre-trained model
+            model_bundle = load_pretrained_model(model_type)
+            if model_bundle is None:
+                empty_return_with_msg = list(empty_return)
+                empty_return_with_msg[9] = html.Div(
+                    f"⚠️ No pre-trained model found for {model_type}. Please train first or run train_pretrained_models.py", 
+                    style={"color": "#f39c12"}
+                )
+                return tuple(empty_return_with_msg)
+            
+            # Store in cache for potential reuse
+            cache_key = f"pretrained_{model_type}"
+            _model_cache[cache_key] = model_bundle
+        else:
+            # Check if model is trained
+            if not model_meta or "cache_key" not in model_meta:
+                empty_return_with_msg = list(empty_return)
+                empty_return_with_msg[9] = html.Div("⚠️ Please train model first!", style={"color": "#f39c12"})
+                return tuple(empty_return_with_msg)
+            
+            # Retrieve model from cache
+            cache_key = model_meta["cache_key"]
+            if cache_key not in _model_cache:
+                empty_return_with_msg = list(empty_return)
+                empty_return_with_msg[9] = html.Div("⚠️ Model expired. Please retrain.", style={"color": "#f39c12"})
+                return tuple(empty_return_with_msg)
+            
+            model_bundle = _model_cache[cache_key]
         
         # Validate no data leakage
-        max_train_year = model_meta.get("max_train_year")
+        max_train_year = model_bundle.get("max_train_year")
         if max_train_year:
             is_valid, message = validate_no_leakage([max_train_year], backtest_start)
             if not is_valid:
@@ -661,17 +745,25 @@ def register_backtest_callbacks(app, load_backtest_df_func=None):
         if strategy == "kelly":
             bt = TwoSidedKellyBacktester(
                 initial_capital=capital,
-                kelly_multiplier=float(params.get("kelly_mult", 0.5)),
-                max_stake_pct=float(params.get("max_stake", 0.15)),
+                kelly_multiplier=float(params.get("kelly_mult", 0.25)),
+                max_stake_pct=float(params.get("max_stake", 0.05)),
             )
             color = "#8e44ad"
-            title = "Two-Sided Kelly"
-        elif strategy == "top_player":
+            title = "Fractional Kelly"
+        elif strategy == "flat_kelly":
+            bt = FlatKellyBacktester(
+                initial_capital=capital,
+                kelly_multiplier=float(params.get("kelly_mult", 0.25)),
+                max_stake_pct=float(params.get("max_stake", 0.08)),
+            )
+            color = "#27ae60"
+            title = "Flat Kelly"
+        elif strategy == "kelly_top_player":
             bt = TopPlayerKellyBacktester(
                 top_n=int(params.get("top_n", 8)),
                 initial_capital=capital,
-                kelly_multiplier=float(params.get("kelly_mult", 0.5)),
-                max_stake_pct=float(params.get("max_stake", 0.15)),
+                kelly_multiplier=float(params.get("kelly_mult", 0.25)),
+                max_stake_pct=float(params.get("max_stake", 0.05)),
             )
             color = "#3498db"
             title = "Top Player Kelly"
@@ -682,7 +774,7 @@ def register_backtest_callbacks(app, load_backtest_df_func=None):
                 min_prob=float(params.get("min_prob", 0.5)),
             )
             color = "#f39c12"
-            title = "Fixed Stake"
+            title = "Flat Staking"
         elif strategy == "odds_only":
             bt = OddsOnlyBacktester(
                 initial_capital=capital,
@@ -693,14 +785,6 @@ def register_backtest_callbacks(app, load_backtest_df_func=None):
             )
             color = "#9b59b6"
             title = f"Odds Only ({params.get('bet_on', 'favorite').title()})"
-        else:  # simple
-            bt = TwoSidedBacktester(
-                initial_capital=capital,
-                bet_amount=float(params.get("bet_amount", 100)),
-                threshold=float(params.get("threshold", 0.05)),
-            )
-            color = "#e74c3c"
-            title = "Two-Sided Simple"
 
         bt.run(df)
 
