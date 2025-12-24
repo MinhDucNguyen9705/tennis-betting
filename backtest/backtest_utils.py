@@ -25,21 +25,24 @@ class TwoSidedKellyBacktester:
         self.trades = []
 
     def calculate_kelly_stake(self, prob, odds):
-        """Tính % vốn cược theo công thức Kelly"""
         if odds <= 1: return 0.0
-        
+    
+        # GIẢM ĐỘ TỰ TIN CỦA MODEL
+        # Nếu model nói 80%, ta chỉ tin khoảng 75%
+        conservative_prob = prob * 0.95 
+    
         b = odds - 1
-        p = prob
+        p = conservative_prob
         q = 1 - p
-        
-        # Công thức: f = (bp - q) / b
+    
         f = (b * p - q) / b
-        
-        # Chỉ cược nếu f > 0
+    
         if f <= 0: return 0.0
         
-        # Điều chỉnh Fractional & Max Cap
-        f_final = f * self.kelly_multiplier
+        # Kelly Tennis thường dùng multiplier thấp
+        # Khuyên dùng: 0.1 đến 0.25
+        f_final = f * self.kelly_multiplier 
+        
         return min(f_final, self.max_stake_pct)
 
     def run(self, df, prob_col='Prob_P1', p1_col='Name_1', winner_col='Victory'):
@@ -195,6 +198,195 @@ class TwoSidedKellyBacktester:
         plt.legend()
         plt.grid(True)
         plt.show()
+
+
+class FlatKellyBacktester:
+    """
+    Flat Kelly Backtester - Uses Kelly formula but with FIXED (initial) capital for bet sizing.
+    
+    This prevents bets from shrinking during losing streaks while still using Kelly's 
+    edge calculation for bet selection and sizing percentages.
+    
+    Example: Initial capital = $10,000, Kelly says 5% 
+    -> Always bet $500 regardless of current capital being $15k or $8k
+    """
+    
+    def __init__(self, initial_capital=1000, kelly_multiplier=0.25, max_stake_pct=0.10):
+        """
+        :param initial_capital: Starting capital (used for BOTH tracking AND bet sizing)
+        :param kelly_multiplier: Kelly fraction (0.1-0.25 recommended for tennis)
+        :param max_stake_pct: Maximum stake as % of INITIAL capital
+        """
+        self.initial_capital = initial_capital
+        self.current_capital = initial_capital
+        self.base_capital = initial_capital  # Fixed base for bet sizing
+        self.kelly_multiplier = kelly_multiplier
+        self.max_stake_pct = max_stake_pct
+        
+        self.capital_history = [initial_capital]
+        self.stakes_history = []
+        self.metrics = {}
+        self.trades = []
+
+    def calculate_kelly_stake(self, prob, odds):
+        """Calculate Kelly stake percentage."""
+        if odds <= 1: 
+            return 0.0
+    
+        # Conservative probability adjustment
+        conservative_prob = prob * 0.95
+    
+        b = odds - 1
+        p = conservative_prob
+        q = 1 - p
+    
+        f = (b * p - q) / b
+    
+        if f <= 0: 
+            return 0.0
+        
+        f_final = f * self.kelly_multiplier
+        return min(f_final, self.max_stake_pct)
+
+    def run(self, df, prob_col='Prob_P1', p1_col='Name_1', winner_col='Victory'):
+        bets_won = 0
+        bets_lost = 0
+        skipped = 0
+        
+        data = df.copy()
+        
+        for idx, row in data.iterrows():
+            if self.current_capital <= 0:
+                break
+                
+            try:
+                name_1 = row[p1_col]
+                winner = row[winner_col]
+
+                odds_p1 = row['PS_1']
+                odds_p2 = row['PS_2']
+                if winner == 0:
+                    p1_outcome = 1 
+                else:
+                    p1_outcome = 0
+                
+                if pd.isna(odds_p1) or pd.isna(odds_p2): 
+                    continue
+
+                prob_p1 = row[prob_col]
+                stake_p1 = self.calculate_kelly_stake(prob_p1, odds_p1)
+                
+                prob_p2 = 1.0 - prob_p1
+                stake_p2 = self.calculate_kelly_stake(prob_p2, odds_p2)
+                
+                selected_bet = None
+                final_stake_pct = 0.0
+                
+                # Select best edge
+                if stake_p1 > 0 and stake_p1 >= stake_p2:
+                    selected_bet = 'P1'
+                    final_stake_pct = stake_p1
+                elif stake_p2 > 0 and stake_p2 > stake_p1:
+                    selected_bet = 'P2'
+                    final_stake_pct = stake_p2
+                
+                if selected_bet:
+                    # KEY DIFFERENCE: Use INITIAL capital, not current capital
+                    bet_amount = self.base_capital * final_stake_pct
+                    
+                    # Check if we can afford this bet
+                    if bet_amount > self.current_capital:
+                        bet_amount = self.current_capital  # Bet remaining capital
+                    
+                    if bet_amount < 1.0:
+                        skipped += 1
+                        self.stakes_history.append(0)
+                        continue
+                    
+                    is_win = False
+                    profit = 0.0
+                    if selected_bet == 'P1' and p1_outcome == 1:
+                        is_win = True
+                        profit = bet_amount * (odds_p1 - 1)
+                    elif selected_bet == 'P2' and p1_outcome == 0:
+                        is_win = True
+                        profit = bet_amount * (odds_p2 - 1)
+                    
+                    if is_win:
+                        self.current_capital += profit
+                        bets_won += 1
+                    else:
+                        self.current_capital -= bet_amount
+                        bets_lost += 1
+                        
+                    self.stakes_history.append(final_stake_pct)
+
+                    odds = odds_p1 if selected_bet == "P1" else odds_p2
+                    prob = prob_p1 if selected_bet == "P1" else prob_p2
+                    payout = profit if is_win else -bet_amount
+
+                    self.trades.append({
+                        "date": row.get("tournament_date", None),
+                        "tournament": row.get("tournament", None),
+                        "tournament_level": row.get("tournament_level", None),
+                        "surface": row.get("tournament_surface", row.get("surface", None)),
+                        "round": row.get("round", None),
+                        
+                        "player1": row.get("Name_1", None),
+                        "player2": row.get("Name_2", None),
+
+                        "bet_side": selected_bet,
+                        "prob": float(prob),
+                        "odds": float(odds),
+                        "stake": float(bet_amount),
+                        "pnl": float(payout),
+                        "is_win": int(is_win),
+
+                        "rank1": row.get("Ranking_1", None),
+                        "rank2": row.get("Ranking_2", None),
+                        "rank_diff": (row.get("Ranking_2", None) - row.get("Ranking_1", None))
+                                    if (pd.notna(row.get("Ranking_1", None)) and pd.notna(row.get("Ranking_2", None)))
+                                    else None,
+                    })
+                else:
+                    skipped += 1
+                    self.stakes_history.append(0)
+
+            except Exception as e:
+                continue
+            
+            if self.current_capital <= 0:
+                break
+            if self.current_capital == self.capital_history[-1]:
+                continue
+            self.capital_history.append(self.current_capital)
+            
+        self._generate_report(bets_won, bets_lost, skipped)
+
+    def _generate_report(self, wins, losses, skipped):
+        total_bets = wins + losses
+        profit = self.current_capital - self.initial_capital
+        roi = (profit / self.initial_capital * 100)
+        
+        peak = self.initial_capital
+        max_dd = 0
+        for x in self.capital_history:
+            if x > peak: 
+                peak = x
+            dd = (peak - x) / peak
+            if dd > max_dd: 
+                max_dd = dd
+
+    def plot_results(self):
+        plt.figure(figsize=(10, 6))
+        plt.plot(self.capital_history, color='green', label='Bankroll')
+        plt.axhline(y=self.initial_capital, color='r', linestyle='--')
+        plt.title(f'Flat Kelly Growth (Base: ${self.base_capital}, Max: {self.max_stake_pct*100}%)')
+        plt.ylabel('Capital ($)')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
 
 class TopPlayerKellyBacktester:
     def __init__(self, top_n=8, initial_capital=1000, kelly_multiplier=0.5, max_stake_pct=0.15):

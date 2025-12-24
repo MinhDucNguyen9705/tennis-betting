@@ -13,6 +13,7 @@ import numpy as np
 try:
     from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
     from sklearn.linear_model import LogisticRegression
+    from sklearn.svm import SVC
     from sklearn.calibration import CalibratedClassifierCV
     from sklearn.preprocessing import StandardScaler
     from sklearn.pipeline import Pipeline
@@ -32,13 +33,27 @@ MODEL_TYPES = {
     'hist_gradient_boosting': 'HistGradientBoosting',
     'random_forest': 'RandomForest',
     'logistic_regression': 'Logistic Regression',
+    'svm': 'SVM',
     'catboost': 'CatBoost',
 }
+
+# Try to import joblib for model persistence
+try:
+    import joblib
+    HAS_JOBLIB = True
+except ImportError:
+    HAS_JOBLIB = False
 
 # Default data directory
 DEFAULT_DATA_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     'data_tennis_match_reduced'
+)
+
+# Pre-trained models directory
+PRETRAINED_MODELS_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    'pretrained_models'
 )
 
 # Available year ranges
@@ -502,6 +517,18 @@ def train_model(
                 random_state=42
             ))
         ])
+    elif model_type == 'svm':
+        # Use Pipeline with StandardScaler for SVM
+        base_model = Pipeline([
+            ('scaler', StandardScaler()),
+            ('classifier', SVC(
+                C=1.0,
+                kernel='rbf',
+                gamma='scale',
+                probability=True,  # Required for predict_proba
+                random_state=42
+            ))
+        ])
     elif model_type == 'catboost':
         if not HAS_CATBOOST:
             raise ImportError("CatBoost is not installed. Install with: pip install catboost")
@@ -736,3 +763,110 @@ def run_full_pipeline(
     predictions_df = run_backtest_only(model_bundle, backtest_start_date, backtest_end_date, data_dir)
     
     return model_bundle, predictions_df
+
+
+# ============================================================================
+# Pre-trained Model Functions
+# ============================================================================
+
+def list_pretrained_models() -> List[dict]:
+    """
+    List all available pre-trained models.
+    
+    Returns:
+        List of dicts with model info: {'model_type', 'filename', 'filepath', 'years'}
+    """
+    models = []
+    
+    if not os.path.exists(PRETRAINED_MODELS_DIR):
+        return models
+    
+    for filename in os.listdir(PRETRAINED_MODELS_DIR):
+        if not filename.endswith('.joblib'):
+            continue
+        
+        # Parse filename: {model_type}_{start_year}_{end_year}.joblib
+        parts = filename.replace('.joblib', '').split('_')
+        if len(parts) >= 3:
+            # Last two parts are years
+            try:
+                end_year = int(parts[-1])
+                start_year = int(parts[-2])
+                model_type = '_'.join(parts[:-2])
+                
+                models.append({
+                    'model_type': model_type,
+                    'filename': filename,
+                    'filepath': os.path.join(PRETRAINED_MODELS_DIR, filename),
+                    'years': list(range(start_year, end_year + 1)),
+                    'year_range': f"{start_year}-{end_year}",
+                })
+            except (ValueError, IndexError):
+                continue
+    
+    return models
+
+
+def get_pretrained_model_path(model_type: str) -> Optional[str]:
+    """
+    Get the path to a pre-trained model of the specified type.
+    
+    Args:
+        model_type: One of 'svm', 'catboost', 'hist_gradient_boosting', 
+                    'logistic_regression', 'random_forest'
+    
+    Returns:
+        Path to the model file, or None if not found
+    """
+    models = list_pretrained_models()
+    
+    for model in models:
+        if model['model_type'] == model_type:
+            return model['filepath']
+    
+    return None
+
+
+def load_pretrained_model(model_type: str) -> Optional[dict]:
+    """
+    Load a pre-trained model bundle.
+    
+    Args:
+        model_type: One of 'svm', 'catboost', 'hist_gradient_boosting',
+                    'logistic_regression', 'random_forest'
+    
+    Returns:
+        Model bundle dict, or None if not found
+    """
+    logger = get_logger()
+    
+    if not HAS_JOBLIB:
+        logger.error("joblib is required to load pre-trained models")
+        return None
+    
+    filepath = get_pretrained_model_path(model_type)
+    
+    if filepath is None:
+        logger.warning(f"No pre-trained model found for type: {model_type}")
+        return None
+    
+    if not os.path.exists(filepath):
+        logger.warning(f"Pre-trained model file not found: {filepath}")
+        return None
+    
+    try:
+        logger.info(f"Loading pre-trained model: {os.path.basename(filepath)}")
+        bundle = joblib.load(filepath)
+        logger.info(f"  Model type: {bundle.get('model_type', 'unknown')}")
+        logger.info(f"  Features: {len(bundle.get('features', []))}")
+        logger.info(f"  Trained at: {bundle.get('trained_at', 'unknown')}")
+        return bundle
+    except Exception as e:
+        logger.error(f"Failed to load pre-trained model: {str(e)}")
+        return None
+
+
+def has_pretrained_model(model_type: str) -> bool:
+    """Check if a pre-trained model exists for the given type."""
+    return get_pretrained_model_path(model_type) is not None
+
