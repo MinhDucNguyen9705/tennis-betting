@@ -2,6 +2,8 @@ import dash
 from dash import dcc, html, dash_table
 import dash_bootstrap_components as dbc
 
+from h2h_inference import get_model_options, get_surface_options, get_level_options, get_round_options
+
 def kpi_card(title, value_id):
     return dbc.Card(dbc.CardBody([
         html.Div(title, style={"fontSize": "14px", "opacity": 0.8}),
@@ -9,6 +11,12 @@ def kpi_card(title, value_id):
     ]))
 
 def make_h2h_layout(player_dim, levels, min_dt, max_dt, default_p1):
+    # Get options for ML prediction controls
+    model_options = get_model_options()
+    surface_options = get_surface_options()
+    level_options = get_level_options()
+    round_options = get_round_options()
+    
     return dbc.Container(fluid=True, style={"padding": "18px"}, children=[
         dbc.Row([
             dbc.Col(
@@ -65,6 +73,64 @@ def make_h2h_layout(player_dim, levels, min_dt, max_dt, default_p1):
                     ], className="g-2"),
                 ]), style={"height": "auto"}),
                 width=4
+            ),
+        ], className="g-3"),
+        
+        # ML Prediction Controls
+        html.Div(style={"height": "14px"}),
+        dbc.Row([
+            dbc.Col(
+                dbc.Card(dbc.CardBody([
+                    html.Div("ML Prediction Settings", style={"fontSize": "16px", "fontWeight": "600", "marginBottom": "10px"}),
+                    dbc.Row([
+                        dbc.Col([
+                            html.Div("Model", style={"fontSize": "12px", "opacity": 0.8}),
+                            dcc.Dropdown(
+                                id="pred_model",
+                                options=model_options,
+                                value=model_options[0]["value"] if model_options else None,
+                                clearable=False
+                            )
+                        ], width=3, style={"minWidth": 0}),
+                        dbc.Col([
+                            html.Div("Surface", style={"fontSize": "12px", "opacity": 0.8}),
+                            dcc.Dropdown(
+                                id="pred_surface",
+                                options=surface_options,
+                                value="Hard",
+                                clearable=False
+                            )
+                        ], width=2, style={"minWidth": 0}),
+                        dbc.Col([
+                            html.Div("Level", style={"fontSize": "12px", "opacity": 0.8}),
+                            dcc.Dropdown(
+                                id="pred_level",
+                                options=level_options,
+                                value="M",
+                                clearable=False
+                            )
+                        ], width=2, style={"minWidth": 0}),
+                        dbc.Col([
+                            html.Div("Round", style={"fontSize": "12px", "opacity": 0.8}),
+                            dcc.Dropdown(
+                                id="pred_round",
+                                options=round_options,
+                                value="R32",
+                                clearable=False
+                            )
+                        ], width=2, style={"minWidth": 0}),
+                        dbc.Col([
+                            html.Div("Best Of", style={"fontSize": "12px", "opacity": 0.8}),
+                            dbc.RadioItems(
+                                id="pred_best_of",
+                                options=[{"label": "3", "value": 3}, {"label": "5", "value": 5}],
+                                value=3,
+                                inline=True
+                            )
+                        ], width=3, style={"minWidth": 0, "paddingTop": "4px"}),
+                    ], className="g-2"),
+                ])),
+                width=12
             ),
         ], className="g-3"),
 

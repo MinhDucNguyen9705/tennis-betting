@@ -48,7 +48,7 @@ def make_backtest_layout():
             # Training Configuration
             dbc.Col(dbc.Card(dbc.CardBody([
                 html.Div([
-                    html.Span("📊 ", style={"fontSize": "20px"}),
+                    html.Span("", style={"fontSize": "20px"}),
                     html.Span("Training Configuration", style={"fontSize": "18px", "fontWeight": "600"}),
                 ], style={"marginBottom": "15px"}),
                 
@@ -128,7 +128,7 @@ def make_backtest_layout():
             # Backtest Configuration
             dbc.Col(dbc.Card(dbc.CardBody([
                 html.Div([
-                    html.Span("📈 ", style={"fontSize": "20px"}),
+                    html.Span("", style={"fontSize": "20px"}),
                     html.Span("Backtest Configuration", style={"fontSize": "18px", "fontWeight": "600"}),
                 ], style={"marginBottom": "15px"}),
                 
@@ -264,7 +264,7 @@ def make_backtest_layout():
                     color="#27ae60",
                     children=[
                         html.Button(
-                            "📈 Run Backtest",
+                            "Run Backtest",
                             id="bt_run",
                             n_clicks=0,
                             style={
@@ -326,7 +326,7 @@ def make_backtest_layout():
         dbc.Row([
             dbc.Col(dbc.Card(dbc.CardBody([
                 html.Div([
-                    html.Span("📋", style={"fontSize": "18px"}),
+                    html.Span("", style={"fontSize": "18px"}),
                     html.Span("Bet History", style={"fontWeight": 600, "fontSize": "16px"}),
                     html.Span(id="bt_bet_count", style={"marginLeft": "10px", "fontSize": "12px", "color": "#888"}),
                 ], style={"marginBottom": 12}),
@@ -432,7 +432,7 @@ def register_backtest_callbacks(app, load_backtest_df_func=None):
             # Check if pretrained model exists
             if has_pretrained_model(model_type):
                 status = html.Div([
-                    html.Span("✅ ", style={"color": "#27ae60"}),
+                    html.Span("", style={"color": "#27ae60"}),
                     html.Span("Pre-trained model available", style={"color": "#27ae60"})
                 ])
             else:
