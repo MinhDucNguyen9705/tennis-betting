@@ -5,11 +5,14 @@ import plotly.graph_objects as go
 from dash import Input, Output
 
 from data_access import (
-    get_opponents_for_id, kpis, surface_wl,
+    get_opponents_for_id, get_player_dim, kpis, surface_wl,
     profile_kpis, total_aces_by_player, avg_attributes_by_player, wl_grouped,
     top_opponents, recent_matches_player,
     win_round_counts, COLS
 )
+
+# Cache all players for dropdown (avoids repeated DB queries)
+_all_players_cache = None
 from figures import stacked_surface_fig, stacked_wl_fig, double_donut_win_round, radar_figure
 from data_access import detail_rows
 from h2h_inference import predict_h2h
@@ -19,7 +22,9 @@ def resolve_profile_filters(mode, start_date, end_date, level):
         return None, None, "(All)"
     return start_date, end_date, level
 
-def register_callbacks(app):
+def register_callbacks(app, player_dim=None):
+    # Store player_dim in module scope for callback access
+    _player_dim = player_dim
 
     @app.callback(
         Output("player2", "options"),
@@ -29,12 +34,24 @@ def register_callbacks(app):
     def update_player2_options(p1_id):
         if not p1_id:
             return [{"label": "(All)", "value": "(All)"}], "(All)"
-        opps = get_opponents_for_id(p1_id)
-        options = [{"label": "(All)", "value": "(All)"}] + [
-            {"label": f"{r.opp_name} (ID: {r.opp_id})", "value": r.opp_id}
-            for r in opps.itertuples(index=False)
-            if pd.notna(r.opp_id)
-        ]
+        
+        # Use pre-loaded player_dim passed from app.py
+        if _player_dim is not None and not _player_dim.empty:
+            options = [{"label": "(All)", "value": "(All)"}] + [
+                {"label": f"{r.display_name} (ID: {r.id})", "value": r.id}
+                for r in _player_dim.itertuples(index=False)
+                if pd.notna(r.id) and r.id != p1_id
+            ]
+            print(f"[DEBUG] Player2 dropdown options: {len(options)} from pre-loaded player_dim")
+        else:
+            # Fallback to opponents only
+            opps = get_opponents_for_id(p1_id)
+            options = [{"label": "(All)", "value": "(All)"}] + [
+                {"label": f"{r.opp_name} (ID: {r.opp_id})", "value": r.opp_id}
+                for r in opps.itertuples(index=False)
+                if pd.notna(r.opp_id)
+            ]
+            print(f"[DEBUG] Player2 dropdown options: {len(options)} fallback to opponents")
         return options, "(All)"
 
     @app.callback(
@@ -72,7 +89,7 @@ def register_callbacks(app):
         print(f"[DEBUG] Callback received: model={pred_model}, surface={pred_surface}, level={pred_level}, round={pred_round}, best_of={pred_best_of}")
         if p2_id and p2_id != "(All)" and pred_model and pred_model != "none":
             try:
-                prob = predict_h2h(
+                result = predict_h2h(
                     model_type=pred_model,
                     p1_id=p1_id,
                     p2_id=p2_id,
@@ -81,8 +98,16 @@ def register_callbacks(app):
                     round_val=pred_round or "R32",
                     best_of=pred_best_of or 3
                 )
-                if prob is not None:
-                    k3 = f"{prob*100:.1f}%"
+                if result is not None:
+                    # Handle both dict (new) and float (legacy) return types
+                    if isinstance(result, dict):
+                        prob = result.get('probability')
+                        method = result.get('method', '')
+                        if prob is not None:
+                            k3 = f"{prob*100:.1f}% ({method})"
+                    else:
+                        # Legacy float return
+                        k3 = f"{result*100:.1f}%"
             except Exception as e:
                 print(f"ML prediction error: {e}")
                 k3 = "—"

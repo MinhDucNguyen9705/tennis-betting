@@ -71,6 +71,18 @@ AVAILABLE_MODELS = {
 # Cached model bundles
 _model_cache = {}
 
+# ELO configuration
+ELO_BASE = 1500.0
+ELO_K = 32.0
+
+# Cached ELO ratings - computed once from all historical matches
+_elo_cache = {
+    'elo': {},           # player_id -> overall ELO rating
+    'surf_elo': {},      # (player_id, surface_code) -> surface-specific ELO
+    'rankings': {},      # player_id -> latest ranking
+    'computed': False,   # Whether ELO has been computed
+}
+
 
 def list_pretrained_models():
     """List available pretrained models."""
@@ -129,6 +141,176 @@ def load_model(model_type: str):
     except Exception as e:
         print(f"ERROR loading model: {e}")
         return None
+
+
+def compute_all_elo_ratings():
+    """
+    Compute ELO ratings for all players from historical matches.
+    
+    This runs once and caches the results. ELO is computed chronologically
+    to ensure proper temporal ordering.
+    """
+    global _elo_cache
+    
+    if _elo_cache['computed']:
+        return
+    
+    print("[H2H Inference] Computing ELO ratings from historical matches...")
+    start_time = time.time()
+    
+    # Query all matches with required columns, sorted by date
+    q = """
+    SELECT 
+        ID_1, ID_2, 
+        tournament_surface,
+        Winner,
+        Ranking_1, Ranking_2,
+        CAST(tournament_date AS DATE) AS match_date
+    FROM matches
+    WHERE ID_1 IS NOT NULL 
+      AND ID_2 IS NOT NULL
+      AND Winner IS NOT NULL
+    ORDER BY match_date ASC
+    """
+    
+    df = sql_df(q)
+    
+    if df.empty:
+        print("[H2H Inference] WARNING: No matches found for ELO computation")
+        _elo_cache['computed'] = True
+        return
+    
+    # Initialize ELO dictionaries with default values
+    from collections import defaultdict
+    elo = defaultdict(lambda: ELO_BASE)
+    surf_elo = defaultdict(lambda: ELO_BASE)
+    rankings = {}
+    
+    def expected_score(r1, r2):
+        """Calculate expected score using ELO formula."""
+        return 1.0 / (1.0 + 10 ** ((r2 - r1) / 400.0))
+    
+    # Iterate through matches chronologically
+    for _, row in df.iterrows():
+        p1, p2 = row['ID_1'], row['ID_2']
+        surf = row.get('tournament_surface', 'Hard')
+        winner = row['Winner']
+        
+        # Map surface to code
+        surf_code = ENCODINGS['surface'].get(surf, 0)
+        
+        # Current ELO ratings (before this match)
+        r1, r2 = elo[p1], elo[p2]
+        sr1, sr2 = surf_elo[(p1, surf_code)], surf_elo[(p2, surf_code)]
+        
+        # Determine actual outcome (1 if P1 wins, 0 if P2 wins)
+        # Winner == 0 means P1 wins in most datasets
+        actual = 1.0 if winner == 0 else 0.0
+        
+        # Update overall ELO
+        exp1 = expected_score(r1, r2)
+        elo[p1] = r1 + ELO_K * (actual - exp1)
+        elo[p2] = r2 + ELO_K * ((1 - actual) - (1 - exp1))
+        
+        # Update surface-specific ELO
+        exp_s1 = expected_score(sr1, sr2)
+        surf_elo[(p1, surf_code)] = sr1 + ELO_K * (actual - exp_s1)
+        surf_elo[(p2, surf_code)] = sr2 + ELO_K * ((1 - actual) - (1 - exp_s1))
+        
+        # Track latest rankings
+        if pd.notna(row.get('Ranking_1')):
+            rankings[p1] = int(row['Ranking_1'])
+        if pd.notna(row.get('Ranking_2')):
+            rankings[p2] = int(row['Ranking_2'])
+    
+    # Store in cache (convert defaultdict to regular dict)
+    _elo_cache['elo'] = dict(elo)
+    _elo_cache['surf_elo'] = dict(surf_elo)
+    _elo_cache['rankings'] = rankings
+    _elo_cache['computed'] = True
+    
+    elapsed = time.time() - start_time
+    print(f"[H2H Inference] ELO computed for {len(elo)} players in {elapsed:.2f}s")
+
+
+def get_player_elo(player_id, surface=None):
+    """
+    Get ELO rating for a player.
+    
+    Args:
+        player_id: Player ID
+        surface: Optional surface name ('Hard', 'Clay', 'Grass')
+                 If provided, returns surface-specific ELO
+    
+    Returns:
+        ELO rating (float), or ELO_BASE if player not found
+    """
+    # Ensure ELO is computed
+    if not _elo_cache['computed']:
+        compute_all_elo_ratings()
+    
+    # Convert player_id to native Python type
+    if hasattr(player_id, 'item'):
+        player_id = player_id.item()
+    else:
+        player_id = int(player_id) if isinstance(player_id, (np.integer, np.int64)) else player_id
+    
+    if surface:
+        surf_code = ENCODINGS['surface'].get(surface, 0)
+        return _elo_cache['surf_elo'].get((player_id, surf_code), ELO_BASE)
+    
+    return _elo_cache['elo'].get(player_id, ELO_BASE)
+
+
+def get_player_ranking(player_id):
+    """Get last known ranking for a player."""
+    if not _elo_cache['computed']:
+        compute_all_elo_ratings()
+    
+    if hasattr(player_id, 'item'):
+        player_id = player_id.item()
+    else:
+        player_id = int(player_id) if isinstance(player_id, (np.integer, np.int64)) else player_id
+    
+    return _elo_cache['rankings'].get(player_id, None)
+
+
+def elo_win_probability(elo1, elo2):
+    """
+    Calculate win probability using ELO ratings.
+    
+    Args:
+        elo1: Player 1's ELO rating
+        elo2: Player 2's ELO rating
+    
+    Returns:
+        Probability that player 1 wins (0-1)
+    """
+    return 1.0 / (1.0 + 10 ** ((elo2 - elo1) / 400.0))
+
+
+def ranking_win_probability(rank1, rank2):
+    """
+    Estimate win probability from ATP rankings.
+    
+    Uses log-scale comparison since ranking differences matter more at the top.
+    
+    Args:
+        rank1: Player 1's ATP ranking
+        rank2: Player 2's ATP ranking
+    
+    Returns:
+        Probability that player 1 wins (0-1)
+    """
+    if rank1 is None or rank2 is None:
+        return 0.5  # No data, 50-50
+    
+    if rank1 <= 0 or rank2 <= 0:
+        return 0.5
+    
+    # Log-scale comparison
+    log_ratio = np.log(rank2 / rank1)
+    return 1.0 / (1.0 + np.exp(-0.4 * log_ratio))
 
 
 def get_player_features(player_id):
@@ -346,6 +528,13 @@ def predict_h2h(model_type, p1_id, p2_id, surface='Hard', level='M', round_val='
     """
     Predict the probability of Player 1 winning against Player 2.
     
+    Uses a hybrid approach combining ML model predictions with ELO ratings.
+    Falls back gracefully when data is missing:
+    - Full ML + ELO hybrid when all features available
+    - ELO-only when player features missing
+    - Ranking-based when ELO unavailable
+    - 50% when no data at all
+    
     Args:
         model_type: Pretrained model type (e.g., 'catboost', 'hist_gradient_boosting')
         p1_id: Player 1 ID
@@ -356,58 +545,121 @@ def predict_h2h(model_type, p1_id, p2_id, surface='Hard', level='M', round_val='
         best_of: Number of sets (3 or 5)
     
     Returns:
-        float: Probability of Player 1 winning (0-1), or None if prediction fails
+        dict: {
+            'probability': float (0-1),
+            'method': str ('ML+ELO', 'ELO', 'RANKING', 'DEFAULT'),
+            'ml_prob': float or None,
+            'elo_prob': float or None,
+            'surf_elo_prob': float or None
+        }
+        Returns simple float for backward compatibility if prediction succeeds via ML
     """
-    # Load model
+    start_time = time.time()
+    
+    # Ensure ELO ratings are computed
+    if not _elo_cache['computed']:
+        compute_all_elo_ratings()
+    
+    # Get ELO-based probabilities
+    elo1 = get_player_elo(p1_id)
+    elo2 = get_player_elo(p2_id)
+    surf_elo1 = get_player_elo(p1_id, surface)
+    surf_elo2 = get_player_elo(p2_id, surface)
+    
+    elo_prob = elo_win_probability(elo1, elo2)
+    surf_elo_prob = elo_win_probability(surf_elo1, surf_elo2)
+    
+    # Check if players have ELO data (not just default base)
+    has_p1_elo = elo1 != ELO_BASE
+    has_p2_elo = elo2 != ELO_BASE
+    has_elo_data = has_p1_elo or has_p2_elo
+    
+    # Get rankings for fallback
+    rank1 = get_player_ranking(p1_id)
+    rank2 = get_player_ranking(p2_id)
+    ranking_prob = ranking_win_probability(rank1, rank2)
+    
+    # Load ML model
     bundle = load_model(model_type)
-    if bundle is None:
-        return None
+    ml_prob = None
     
-    model = bundle.get('model')
-    feature_names = bundle.get('features', [])
-    
-    if model is None:
-        return None
-    
-    # Get player features
-    p1_features = get_player_features(p1_id)
-    p2_features = get_player_features(p2_id)
-    
-    if p1_features is None or p2_features is None:
-        return None
-    
-    # Build match features
-    match_features = build_match_features(p1_features, p2_features, surface, level, round_val, best_of)
-    
-    # Create feature vector in correct order
-    X = []
-    for fname in feature_names:
-        val = match_features.get(fname, -1)
-        if val is None or (isinstance(val, float) and np.isnan(val)):
-            val = -1
-        X.append(val)
-    
-    X = np.array([X])
-    
-    # Predict
-    try:
-        start_time = time.time()
-        proba = model.predict_proba(X)
-        # proba[:, 0] is probability of class 0 (P1 wins when Winner==0)
-        p1_win_prob = proba[0, 0]
-        elapsed_ms = (time.time() - start_time) * 1000
+    if bundle is not None:
+        model = bundle.get('model')
+        feature_names = bundle.get('features', [])
         
-        # Log prediction info
-        p1_rank = match_features.get('Ranking_1', '?')
-        p2_rank = match_features.get('Ranking_2', '?')
-        print(f"[H2H Inference] Model: {model_type} | P1(rank {p1_rank}) vs P2(rank {p2_rank}) | "
-              f"{surface}/{level}/{round_val}/BO{best_of} | "
-              f"P1 Win: {p1_win_prob*100:.1f}% | Time: {elapsed_ms:.1f}ms")
+        if model is not None:
+            # Get player features
+            p1_features = get_player_features(p1_id)
+            p2_features = get_player_features(p2_id)
+            
+            if p1_features is not None and p2_features is not None:
+                # Build match features
+                match_features = build_match_features(
+                    p1_features, p2_features, surface, level, round_val, best_of
+                )
+                
+                # Create feature vector
+                X = []
+                for fname in feature_names:
+                    val = match_features.get(fname, -1)
+                    if val is None or (isinstance(val, float) and np.isnan(val)):
+                        val = -1
+                    X.append(val)
+                
+                X = np.array([X])
+                
+                try:
+                    proba = model.predict_proba(X)
+                    ml_prob = float(proba[0, 0])
+                except Exception as e:
+                    print(f"[H2H Inference] ML prediction error: {e}")
+                    ml_prob = None
+    
+    # Determine final probability and method
+    if ml_prob is not None:
+        # Hybrid: Weight surface ELO more heavily since it captures surface-specific form
+        # ML model already includes these features but with lower importance
+        # Base weights: 60% ML + 25% surface ELO + 15% overall ELO
+        ml_weight = 0.60
+        surf_elo_weight = 0.25
+        elo_weight = 0.15
         
-        return float(p1_win_prob)
-    except Exception as e:
-        print(f"[H2H Inference] Prediction error: {e}")
-        return None
+        final_prob = ml_weight * ml_prob + surf_elo_weight * surf_elo_prob + elo_weight * elo_prob
+        method = 'ML+ELO'
+    elif has_elo_data:
+        # ELO only: 70% surface ELO + 30% overall ELO (surface matters more!)
+        final_prob = 0.70 * surf_elo_prob + 0.30 * elo_prob
+        method = 'ELO'
+    elif rank1 is not None or rank2 is not None:
+        # Ranking-based fallback
+        final_prob = ranking_prob
+        method = 'RANKING'
+    else:
+        # No data at all - 50/50
+        final_prob = 0.5
+        method = 'DEFAULT'
+    
+    elapsed_ms = (time.time() - start_time) * 1000
+    
+    # Log prediction info
+    print(f"[H2H Inference] Method: {method} | Model: {model_type} | "
+          f"ELO: {elo1:.0f} vs {elo2:.0f} | SurfELO: {surf_elo1:.0f} vs {surf_elo2:.0f} | "
+          f"{surface}/{level}/{round_val}/BO{best_of} | "
+          f"P1 Win: {final_prob*100:.1f}% | Time: {elapsed_ms:.1f}ms")
+    
+    # Return dict with all info for transparency
+    return {
+        'probability': float(final_prob),
+        'method': method,
+        'ml_prob': ml_prob,
+        'elo_prob': float(elo_prob),
+        'surf_elo_prob': float(surf_elo_prob),
+        'ranking_prob': float(ranking_prob) if rank1 or rank2 else None,
+        'p1_elo': float(elo1),
+        'p2_elo': float(elo2),
+        'p1_surf_elo': float(surf_elo1),
+        'p2_surf_elo': float(surf_elo2),
+    }
 
 
 def get_model_options():

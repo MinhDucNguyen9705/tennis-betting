@@ -564,7 +564,7 @@ app.layout = dbc.Container(
     ],
 )
 
-register_callbacks(app)
+register_callbacks(app, player_dim)
 def load_backtest_df():
     # IMPORTANT: replace this with your real data source:
     # - DuckDB query

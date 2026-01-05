@@ -40,14 +40,15 @@ def make_h2h_layout(player_dim, levels, min_dt, max_dt, default_p1):
                                 options=[{"label": f"{r.display_name} (ID: {r.id})", "value": r.id}
                                          for r in player_dim.itertuples(index=False)],
                                 value=default_p1,
-                                clearable=False
+                                clearable=False,
+                                searchable=True
                             )
                         ], width=6, style={"minWidth": 0}),
                         dbc.Col([
                             html.Div("Player 2", style={"fontSize": "12px", "opacity": 0.8}),
                             dcc.Dropdown(id="player2",
                                          options=[{"label": "(All)", "value": "(All)"}],
-                                         value="(All)", clearable=False)
+                                         value="(All)", clearable=False, searchable=True)
                         ], width=6, style={"minWidth": 0}),
                     ], className="g-2", style={"marginBottom": "10px"}),
 
