@@ -3,7 +3,7 @@ import pandas as pd
 from config import PARQUET_GLOB, DUCKDB_THREADS
 
 con = duckdb.connect(database=":memory:")
-
+#
 con.execute(f"""
 CREATE OR REPLACE VIEW matches AS
 SELECT * FROM read_parquet('{PARQUET_GLOB}');
